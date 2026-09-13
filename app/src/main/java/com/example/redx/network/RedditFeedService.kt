@@ -207,7 +207,7 @@ object RedditFeedService {
                     }
                     return Result.failure(Exception("HTTP ${response.code}: ${response.message.ifBlank { "Request failed" }}"))
                 }
-                val body = response.body?.string().orEmpty()
+                val body = response.body.string()
                 if (body.isBlank()) return Result.failure(Exception("Empty response body"))
                 Result.success(parseJsonListing(body, fallbackSubreddit))
             }
@@ -246,7 +246,8 @@ object RedditFeedService {
                     return Result.failure(Exception("HTTP ${response.code}: ${response.message.ifBlank { "Request failed" }}"))
                 }
 
-                val body = response.body?.string() ?: return Result.failure(Exception("Empty response body"))
+                val body = response.body.string()
+                if (body.isBlank()) return Result.failure(Exception("Empty response body"))
                 return Result.success(parseAtomFeed(body, fallbackSubreddit))
             }
         } catch (e: Exception) {

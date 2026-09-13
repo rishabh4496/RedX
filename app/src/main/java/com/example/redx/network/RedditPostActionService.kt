@@ -117,7 +117,7 @@ object RedditPostActionService {
             if (!modhash.isNullOrBlank()) requestBuilder.header("X-Modhash", modhash)
 
             client.newCall(requestBuilder.build()).execute().use { response ->
-                val body = response.body?.string().orEmpty()
+                val body = response.body.string()
                 if (!response.isSuccessful) {
                     return Result.failure(IllegalStateException("HTTP ${response.code} from Reddit"))
                 }
@@ -152,7 +152,7 @@ object RedditPostActionService {
                     .build()
                 client.newCall(request).execute().use { response ->
                     if (response.isSuccessful) {
-                        val body = response.body?.string().orEmpty()
+                        val body = response.body.string()
                         val modhash = JSONObject(body)
                             .optJSONObject("data")
                             ?.optString("modhash")

@@ -33,6 +33,7 @@ class PostSpeechManager(context: Context) {
                         _isSpeaking.value = false
                     }
 
+                    @Suppress("OVERRIDE_DEPRECATION")
                     override fun onError(utteranceId: String?) {
                         _isSpeaking.value = false
                     }

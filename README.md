@@ -47,6 +47,8 @@ Switch seamlessly between different viewing ergonomics:
 ### 👆 Swipe Gestures with Spring Physics
 - **Swipe Right**: Upvote post with orange reveal and haptic feedback.
 - **Swipe Left**: Save / bookmark post with gold reveal.
+- **Swipe from either screen edge**: Move between Home and your subscribed subreddits with circular previous/next navigation.
+- Edge navigation is paused while searching or using Multi-Subreddit mode, so existing card gestures keep their meaning.
 - Enabled across Compact, Relay, Apollo, Streamline, Full Bleed, and Magazine styles.
 
 ### 🌟 Award Badges & Community Flairs
@@ -86,11 +88,11 @@ Switch seamlessly between different viewing ergonomics:
 ## 🛠️ Architecture & Tech Stack
 
 - **Language**: Kotlin 2.3.20 (JVM Toolchain 17)
-- **UI Framework**: Jetpack Compose (BOM 2026.03) + Material 3
+- **UI Framework**: Jetpack Compose (BOM 2026.03.01) + Material 3
 - **Asynchronous Logic**: Kotlin Coroutines & `StateFlow`
-- **Networking**: OkHttp 4.12
+- **Networking**: OkHttp 5.3
 - **Image Loading**: Coil 2.7 with GIF & SVG decoders
-- **Media Playback**: AndroidX Media3 ExoPlayer 1.5.1 (Core, HLS, DASH, UI)
+- **Media Playback**: AndroidX Media3 ExoPlayer 1.11.0 (Core, HLS, DASH, UI)
 - **Architecture**: MVI / Single-State ViewModel pattern (`RedXUiState`)
 
 ---

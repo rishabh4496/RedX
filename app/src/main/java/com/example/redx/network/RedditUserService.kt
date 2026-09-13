@@ -48,7 +48,7 @@ object RedditUserService {
                 if (!response.isSuccessful) {
                     return@withContext Result.failure(Exception("HTTP ${response.code}"))
                 }
-                val body = response.body?.string() ?: return@withContext Result.success(emptyList())
+                val body = response.body.string()
                 val posts = parseUserPosts(body, cleanName)
                 Result.success(posts)
             }
