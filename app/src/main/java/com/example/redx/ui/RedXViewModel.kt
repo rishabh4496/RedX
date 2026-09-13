@@ -23,6 +23,7 @@ import com.example.redx.network.RedditUserService
 import com.example.redx.ui.components.DEFAULT_SUBREDDITS
 import com.example.redx.util.RedditInputValidator
 import com.example.redx.util.RedXLogger
+import com.example.redx.util.SubredditNavigator
 import com.example.redx.util.UrlSafety
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -368,6 +369,26 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
                 }
             )
         }
+    }
+
+    /** Switches between the visible account/default feed chips with a circular edge swipe. */
+    fun switchSubreddit(direction: Int): Boolean {
+        if (_uiState.value.isSearchActive || _uiState.value.multiSubredditMode) return false
+        val accountFeeds = if (userProfile.value.isLoggedIn) {
+            listOf("home") + userProfile.value.subscribedSubreddits.orEmpty()
+        } else {
+            emptyList()
+        }
+        val normalizedAccountFeeds = accountFeeds
+            .mapNotNull(RedditInputValidator::normalizeSubreddit)
+            .distinctBy(String::lowercase)
+        val target = SubredditNavigator.next(
+            current = _uiState.value.activeSubreddit,
+            available = if (normalizedAccountFeeds.size > 1) normalizedAccountFeeds else displayedSubreddits.value,
+            direction = direction
+        ) ?: return false
+        loadFeed(subreddit = target)
+        return true
     }
 
     fun loadMorePosts() {

@@ -154,6 +154,7 @@ import com.example.redx.ui.components.TextOnlyPostCard
 import androidx.compose.material.icons.filled.DynamicFeed
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import com.example.redx.ui.components.CrosspostDialog
+import com.example.redx.ui.components.edgeSubredditSwipe
 import com.example.redx.ui.components.MultiSubredditPickerDialog
 import com.example.redx.ui.components.ReadLaterSheet
 import com.example.redx.ui.components.SwipeablePostCardWrapper
@@ -730,6 +731,11 @@ fun RedXMainScreen(
                                         viewModel.loadFeed(subreddit = sub)
                                         scope.launch { listState.scrollToItem(0) }
                                     },
+                                    onSwitchSubreddit = { direction ->
+                                        if (viewModel.switchSubreddit(direction)) {
+                                            scope.launch { listState.scrollToItem(0) }
+                                        }
+                                    },
                                     onLongClickPost = { post -> viewModel.openQuickActions(post) },
                                     onOpenLightbox = { url, title -> viewModel.openLightbox(url, title) },
                                     onFlairClick = { flair -> viewModel.setFlairFilter(flair) },
@@ -796,6 +802,11 @@ fun RedXMainScreen(
                                 viewModel.loadFeed(subreddit = sub)
                                 scope.launch { listState.scrollToItem(0) }
                             },
+                            onSwitchSubreddit = { direction ->
+                                if (viewModel.switchSubreddit(direction)) {
+                                    scope.launch { listState.scrollToItem(0) }
+                                }
+                            },
                             onLongClickPost = { post -> viewModel.openQuickActions(post) },
                             onOpenLightbox = { url, title -> viewModel.openLightbox(url, title) },
                             onFlairClick = { flair -> viewModel.setFlairFilter(flair) },
@@ -821,6 +832,11 @@ fun RedXMainScreen(
                 onSubredditClick = { sub ->
                     viewModel.loadFeed(subreddit = sub)
                     scope.launch { listState.scrollToItem(0) }
+                },
+                onSwitchSubreddit = { direction ->
+                    if (viewModel.switchSubreddit(direction)) {
+                        scope.launch { listState.scrollToItem(0) }
+                    }
                 },
                 onOpenSearch = { viewModel.setSearchDialogOpen(true) },
                 onOpenSubredditPicker = { viewModel.setCommunityExplorerOpen(true) },
@@ -1201,6 +1217,7 @@ private fun PostFeedContent(
     onVote: (RedditPost, Int) -> Unit,
     onToggleSave: (RedditPost) -> Unit,
     onSubredditClick: (String) -> Unit,
+    onSwitchSubreddit: (Int) -> Unit = {},
     onLongClickPost: (RedditPost) -> Unit,
     onOpenLightbox: (String, String) -> Unit,
     onFlairClick: (String) -> Unit,
@@ -1211,7 +1228,12 @@ private fun PostFeedContent(
     PullToRefreshBox(
         isRefreshing = uiState.isLoading,
         onRefresh = onRefresh,
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier
+            .fillMaxSize()
+            .edgeSubredditSwipe(
+                enabled = !uiState.isSearchActive && !uiState.multiSubredditMode,
+                onSwipe = onSwitchSubreddit
+            )
     ) {
         when {
         uiState.isLoading && uiState.posts.isEmpty() -> {
@@ -1694,6 +1716,7 @@ private fun FeedPanel(
     onVote: (RedditPost, Int) -> Unit,
     onToggleSave: (RedditPost) -> Unit,
     onSubredditClick: (String) -> Unit,
+    onSwitchSubreddit: (Int) -> Unit = {},
     onOpenSearch: () -> Unit,
     onOpenSubredditPicker: () -> Unit,
     onRefresh: () -> Unit,
@@ -1734,7 +1757,12 @@ private fun FeedPanel(
     val refreshRotation = if (uiState.isLoading) phoneRawRotation else 0f
 
     Scaffold(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier
+            .fillMaxSize()
+            .edgeSubredditSwipe(
+                enabled = !uiState.isSearchActive && !uiState.multiSubredditMode,
+                onSwipe = onSwitchSubreddit
+            ),
         containerColor = AmoledBackground,
         topBar = {
             Column {

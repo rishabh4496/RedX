@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DynamicFeed
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -181,6 +182,17 @@ fun SubredditBar(
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                 )
             }
+        }
+
+        if (chips.size > 1) {
+            Icon(
+                imageVector = Icons.Default.SwapHoriz,
+                contentDescription = "Swipe from either screen edge to switch feeds",
+                tint = TextSecondary.copy(alpha = 0.7f),
+                modifier = Modifier
+                    .padding(start = 2.dp, end = 4.dp)
+                    .size(17.dp)
+            )
         }
     }
 }
