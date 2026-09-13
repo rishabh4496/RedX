@@ -85,7 +85,7 @@ fun VideoPlayerView(
             trimmed.replace("&amp;", "&")
         }
     }
-    val safeVideoUrl = UrlSafety.httpUriOrNull(unescapedUrl)?.toString()
+    val safeVideoUrl = UrlSafety.httpsUriOrNull(unescapedUrl)?.toString()
     if (safeVideoUrl == null) {
         Box(
             modifier = modifier
@@ -136,7 +136,7 @@ fun VideoPlayerView(
                         "Origin" to "https://www.reddit.com"
                     )
                 )
-                .setAllowCrossProtocolRedirects(true)
+                .setAllowCrossProtocolRedirects(false)
                 .setConnectTimeoutMs(15000)
                 .setReadTimeoutMs(20000)
         }

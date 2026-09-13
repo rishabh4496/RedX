@@ -81,7 +81,7 @@ data class RedditPost(
             // and animates the GIF, rather than Reddit's static JPEG preview still!
             if (isAnimatedGif) {
                 val directGif = contentUrl.trim().takeIf {
-                    (it.startsWith("http://", ignoreCase = true) || it.startsWith("https://", ignoreCase = true)) &&
+                    UrlSafety.isHttpsUrl(it) &&
                             (UrlSafety.hasExtension(it, "gif") || it.contains(".gif", ignoreCase = true))
                 }
                 if (directGif != null) return directGif
@@ -89,24 +89,24 @@ data class RedditPost(
 
             // If it's a gallery, use the first high-res gallery image
             if (galleryImageUrls.isNotEmpty()) {
-                val firstGallery = galleryImageUrls.firstOrNull()?.takeIf { it.isNotBlank() }
+                val firstGallery = galleryImageUrls.firstOrNull()?.takeIf { UrlSafety.isHttpsUrl(it) }
                 if (firstGallery != null) return firstGallery
             }
 
             val preview = previewImageUrl?.trim()?.takeIf {
-                it.isNotBlank() && (it.startsWith("http://") || it.startsWith("https://")) &&
+                it.isNotBlank() && UrlSafety.isHttpsUrl(it) &&
                         !it.endsWith("default") && !it.endsWith("self") && !it.endsWith("nsfw")
             }
             if (preview != null) return preview
 
             val thumb = thumbnailUrl?.trim()?.takeIf {
-                it.isNotBlank() && (it.startsWith("http://") || it.startsWith("https://")) &&
+                it.isNotBlank() && UrlSafety.isHttpsUrl(it) &&
                         !it.endsWith("default") && !it.endsWith("self") && !it.endsWith("nsfw")
             }
             if (thumb != null) return thumb
 
             val direct = contentUrl.trim().takeIf {
-                it.startsWith("http://") || it.startsWith("https://")
+                UrlSafety.isHttpsUrl(it)
             }?.takeIf {
                 UrlSafety.hasExtension(it, "jpg", "jpeg", "png", "webp", "gif") ||
                         domain.contains("i.redd.it") ||

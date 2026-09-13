@@ -219,16 +219,24 @@ class RedditAccountManager(private val context: Context) {
         if (show) primeMatureContentCookies() else clearMatureContentCookies()
     }
 
-    fun logout() {
+    fun logout(onComplete: () -> Unit = {}) {
         val cookieManager = CookieManager.getInstance()
-        cookieManager.removeAllCookies(null)
+        val showMatureContent = prefs.getBoolean(KEY_SHOW_MATURE, true)
+
+        // Clear the local account state immediately, but wait for WebView's asynchronous
+        // cookie removal before restoring the mature-content preference/cookies.
+        prefs.edit()
+            .clear()
+            .putBoolean(KEY_SHOW_MATURE, showMatureContent)
+            .apply()
+        _userProfile.value = anonymousProfile(showMatureContent)
+
+        cookieManager.removeAllCookies {
+            if (showMatureContent) primeMatureContentCookies() else clearMatureContentCookies()
+            cookieManager.flush()
+            onComplete()
+        }
         cookieManager.flush()
-
-        prefs.edit().clear().apply()
-
-        primeMatureContentCookies()
-
-        _userProfile.value = anonymousProfile(showMatureContent = true)
     }
 
     fun getCookieHeader(includeMature: Boolean = _userProfile.value.showMatureContent): String {

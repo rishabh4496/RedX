@@ -32,7 +32,9 @@ class RedXApplication : Application(), ImageLoaderFactory {
                     .build()
             }
             .crossfade(true)
-            .respectCacheHeaders(false)
+            // Let origin cache directives control freshness while the disk cache provides
+            // fast repeat loads and offline fallbacks.
+            .respectCacheHeaders(true)
             .okHttpClient {
                 OkHttpClient.Builder()
                     .addInterceptor { chain ->

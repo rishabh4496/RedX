@@ -1,5 +1,6 @@
 package com.example.redx.network
 
+import com.example.redx.util.RedditInputValidator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
@@ -47,6 +48,12 @@ object RedditPostActionService {
         targetSubreddit: String,
         title: String
     ): Result<Unit> {
+        val cleanSubreddit = RedditInputValidator.normalizeSubreddit(targetSubreddit)
+            ?: return Result.failure(IllegalArgumentException("Invalid destination subreddit"))
+        val cleanTitle = title.trim().take(300)
+        if (cleanTitle.isBlank()) {
+            return Result.failure(IllegalArgumentException("Crosspost title cannot be blank"))
+        }
         val cleanId = if (sourcePostId.startsWith("t3_")) sourcePostId else "t3_$sourcePostId"
         return postAction(
             url = "https://www.reddit.com/api/submit",
@@ -54,8 +61,8 @@ object RedditPostActionService {
             fields = mapOf(
                 "kind" to "crosspost",
                 "crosspost_fullname" to cleanId,
-                "sr" to targetSubreddit.trim().removePrefix("r/"),
-                "title" to title.trim().ifBlank { "Crosspost" },
+                "sr" to cleanSubreddit,
+                "title" to cleanTitle,
                 "api_type" to "json",
                 "resubmit" to "true"
             )

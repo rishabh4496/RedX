@@ -1251,7 +1251,7 @@ private fun PostFeedContent(
             }
         }
 
-        uiState.errorMessage != null && uiState.posts.isEmpty() -> {
+        (uiState.errorMessage != null || uiState.emptyStateMessage != null) && uiState.posts.isEmpty() -> {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -1260,14 +1260,18 @@ private fun PostFeedContent(
                 verticalArrangement = Arrangement.Center
             ) {
                 Text(
-                    text = if (uiState.isSearchActive) "No Matching Content" else "Unable to load feed",
+                    text = when {
+                        uiState.emptyStateMessage != null && uiState.isSearchActive -> "No Matching Content"
+                        uiState.emptyStateMessage != null -> "Nothing to show"
+                        else -> "Unable to load feed"
+                    },
                     color = TextPrimary,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = uiState.errorMessage,
+                    text = uiState.emptyStateMessage ?: uiState.errorMessage.orEmpty(),
                     color = TextSecondary,
                     fontSize = 13.sp,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center

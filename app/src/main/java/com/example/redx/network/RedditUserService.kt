@@ -1,6 +1,8 @@
 package com.example.redx.network
 
+import android.text.Html
 import com.example.redx.model.RedditPost
+import com.example.redx.util.RedditInputValidator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -26,11 +28,11 @@ object RedditUserService {
         cookieHeader: String? = null,
         after: String? = null
     ): Result<List<RedditPost>> = withContext(Dispatchers.IO) {
-        val cleanName = username.trim().removePrefix("u/")
-        if (cleanName.isBlank() || cleanName.equals("[deleted]", ignoreCase = true)) {
-            return@withContext Result.success(emptyList())
-        }
-        val afterParam = after?.let { "&after=$it" } ?: ""
+        val cleanName = RedditInputValidator.normalizeUsername(username)
+            ?: return@withContext Result.failure(IllegalArgumentException("Invalid Reddit username"))
+        val afterParam = after?.trim()?.takeIf { it.isNotBlank() }
+            ?.let { "&after=${java.net.URLEncoder.encode(it, "UTF-8")}" }
+            .orEmpty()
         val url = "https://www.reddit.com/user/$cleanName/submitted.json?limit=25&raw_json=1$afterParam"
         try {
             val requestBuilder = Request.Builder()
@@ -96,7 +98,7 @@ object RedditUserService {
         val previewImage = data.optJSONObject("preview")
             ?.optJSONArray("images")?.optJSONObject(0)
             ?.optJSONObject("source")?.optString("url")
-            ?.replace("&amp;", "&")
+            ?.let { Html.fromHtml(it, Html.FROM_HTML_MODE_LEGACY).toString().trim() }
             ?.takeIf { it.isNotBlank() }
         val createdTime = (data.optDouble("created_utc", 0.0) * 1000).toLong()
             .takeIf { it > 0 } ?: System.currentTimeMillis()
@@ -107,7 +109,7 @@ object RedditUserService {
         val isVideo = data.optBoolean("is_video", false) || !videoUrl.isNullOrBlank()
         val flair = data.optString("link_flair_text").trim().takeIf { it.isNotBlank() && it != "null" }
 
-        val elapsed = (System.currentTimeMillis() - createdTime) / 1000
+        val elapsed = ((System.currentTimeMillis() - createdTime) / 1000).coerceAtLeast(0)
         val timeLabel = when {
             elapsed < 60 -> "${elapsed}s"
             elapsed < 3600 -> "${elapsed / 60}m"

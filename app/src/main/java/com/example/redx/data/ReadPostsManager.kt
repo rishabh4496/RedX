@@ -21,7 +21,7 @@ class ReadPostsManager(context: Context) {
         try {
             val array = JSONArray(jsonString)
             for (i in 0 until array.length()) {
-                set.add(array.getString(i))
+                array.optString(i).trim().takeIf { it.isNotBlank() }?.let(set::add)
             }
         } catch (e: Exception) {
             // Ignore parse errors
@@ -31,13 +31,15 @@ class ReadPostsManager(context: Context) {
 
     private fun persistReadIds(ids: Set<String>) {
         val array = JSONArray()
-        // Limit persistent read history to most recent 2000 posts to avoid unbounded growth
-        val bounded = if (ids.size > 2000) ids.toList().takeLast(2000).toSet() else ids
+        val bounded = boundReadIds(ids)
         for (id in bounded) {
             array.put(id)
         }
         prefs.edit().putString(KEY_READ_IDS, array.toString()).apply()
     }
+
+    private fun boundReadIds(ids: Set<String>): Set<String> =
+        if (ids.size > MAX_READ_HISTORY) ids.toList().takeLast(MAX_READ_HISTORY).toSet() else ids
 
     fun isPostRead(id: String): Boolean {
         return _readPostIds.value.contains(id)
@@ -45,7 +47,7 @@ class ReadPostsManager(context: Context) {
 
     fun markPostRead(id: String) {
         if (id.isBlank() || _readPostIds.value.contains(id)) return
-        val updated = _readPostIds.value + id
+        val updated = boundReadIds(_readPostIds.value + id)
         _readPostIds.value = updated
         persistReadIds(updated)
     }
@@ -74,5 +76,6 @@ class ReadPostsManager(context: Context) {
 
     companion object {
         private const val KEY_READ_IDS = "read_post_ids"
+        private const val MAX_READ_HISTORY = 2_000
     }
 }

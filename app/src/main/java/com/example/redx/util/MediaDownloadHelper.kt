@@ -20,8 +20,8 @@ object MediaDownloadHelper {
             // If it's a Reddit video URL or HLS playlist, resolve to downloadable MP4 fallback
             val targetUrl = resolveDownloadUrl(mediaUrl)
 
-            val uri = UrlSafety.httpUriOrNull(targetUrl)
-                ?: throw IllegalArgumentException("Unsupported media URL")
+            val uri = UrlSafety.httpsUriOrNull(targetUrl)
+                ?: throw IllegalArgumentException("Only secure HTTPS media URLs can be downloaded")
 
             val extension = when {
                 UrlSafety.hasExtension(targetUrl, "mp4") || targetUrl.contains(".mp4", ignoreCase = true) -> ".mp4"

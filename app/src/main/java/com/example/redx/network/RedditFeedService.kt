@@ -3,6 +3,7 @@ package com.example.redx.network
 import android.text.Html
 import com.example.redx.model.FeedSort
 import com.example.redx.model.RedditPost
+import com.example.redx.util.RedditInputValidator
 import com.example.redx.util.UrlSafety
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -146,11 +147,16 @@ object RedditFeedService {
         includeMature: Boolean = true,
         cookieHeader: String? = null
     ): Result<List<RedditPost>> = withContext(Dispatchers.IO) {
+        val cleanQuery = query.trim()
+        if (cleanQuery.isBlank()) {
+            return@withContext Result.failure(IllegalArgumentException("Search query cannot be blank"))
+        }
+
         val cleanSub = subreddit?.trim()?.takeIf { it.isNotBlank() }?.let(::normalizeSubreddit)
         if (subreddit != null && !subreddit.isNullOrBlank() && cleanSub == null) {
             return@withContext Result.failure(IllegalArgumentException("Invalid subreddit name"))
         }
-        val encodedQuery = URLEncoder.encode(query, "UTF-8")
+        val encodedQuery = URLEncoder.encode(cleanQuery, "UTF-8")
         val matureParam = if (includeMature) "on" else "off"
         val sortParam = if (sort == FeedSort.HOT) "hot" else if (sort == FeedSort.NEW) "new" else if (sort == FeedSort.TOP) "top" else "relevance"
 
@@ -162,7 +168,7 @@ object RedditFeedService {
 
         val hasSessionCookie = !cookieHeader.isNullOrBlank() && cookieHeader.contains("reddit_session", ignoreCase = true)
         if (hasSessionCookie) {
-            val jsonSearchUrl = buildJsonSearchUrl(cleanSub, query, sort)
+            val jsonSearchUrl = buildJsonSearchUrl(cleanSub, cleanQuery, sort)
             val jsonAttempt = executeJsonRequest(jsonSearchUrl, cleanSub ?: "all", cookieHeader, includeMature)
             if (jsonAttempt.isSuccess && jsonAttempt.getOrNull()?.isNotEmpty() == true) {
                 return@withContext jsonAttempt
@@ -353,8 +359,12 @@ object RedditFeedService {
         val title = data.optString("title").trim()
         if (title.isBlank()) return null
 
-        val rawId = data.optString("name").ifBlank { "t3_${data.optString("id")}" }
-        val cleanId = if (rawId.startsWith("t3_")) rawId else "t3_$rawId"
+        val rawId = data.optString("name").trim().ifBlank {
+            data.optString("id").trim()
+        }
+        if (rawId.isBlank()) return null
+        val idWithoutPrefix = if (rawId.startsWith("t3_", ignoreCase = true)) rawId.substring(3) else rawId
+        val cleanId = "t3_$idWithoutPrefix".takeIf { idWithoutPrefix.isNotBlank() } ?: return null
         val subreddit = data.optString("subreddit").trim().ifBlank { fallbackSubreddit.ifBlank { "reddit" } }
         val permalinkValue = data.optString("permalink").trim()
         val permalink = when {
@@ -369,7 +379,7 @@ object RedditFeedService {
             catch (_: Exception) { "reddit.com" }
         }
         val galleryImages = extractGalleryImages(data)
-        val previewImage = galleryImages.firstOrNull() ?: parsePreviewImage(data)
+        val previewImage = galleryImages.firstOrNull { UrlSafety.isHttpsUrl(it) } ?: parsePreviewImage(data)
         val thumbnail = cleanRedditMediaUrl(data.optString("thumbnail"))
         val videoUrl = extractVideoUrl(data, contentUrl, domain)
         val createdTime = (data.optDouble("created_utc", 0.0) * 1000).toLong()
@@ -384,7 +394,7 @@ object RedditFeedService {
         val isVideo = data.optBoolean("is_video", false) || !videoUrl.isNullOrBlank() ||
             domain.contains("v.redd.it", true) || UrlSafety.hasExtension(contentUrl, "mp4", "webm", "gifv")
         val flair = data.optString("link_flair_text").trim().takeIf { it.isNotBlank() && it != "null" }
-        
+
         val rawSelfText = data.optString("selftext").trim()
         val rawSelfTextHtml = data.optString("selftext_html").trim()
         val selfText = when {
@@ -564,10 +574,8 @@ object RedditFeedService {
         }
     }
 
-    private fun normalizeSubreddit(raw: String): String? {
-        val clean = raw.trim().removePrefix("r/").removePrefix("/")
-        return clean.takeIf { SUBREDDIT_PATTERN.matches(it) }
-    }
+    private fun normalizeSubreddit(raw: String): String? =
+        RedditInputValidator.normalizeSubreddit(raw)
 
     private fun parseAtomFeed(xml: String, fallbackSubreddit: String): List<RedditPost> {
         val posts = mutableListOf<RedditPost>()
@@ -806,6 +814,5 @@ object RedditFeedService {
         }
     }
 
-    private val SUBREDDIT_PATTERN = Regex("[A-Za-z0-9_-]{1,70}")
     private val MATURE_COOKIE_NAMES = setOf("over18", "mweb_nx_over18", "prompt_shown", "country_code")
 }

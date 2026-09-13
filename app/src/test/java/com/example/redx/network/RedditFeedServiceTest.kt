@@ -1,7 +1,9 @@
 package com.example.redx.network
 
 import com.example.redx.model.FeedSort
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RedditFeedServiceTest {
@@ -36,5 +38,21 @@ class RedditFeedServiceTest {
             "https://www.reddit.com/r/android/search.json?q=compose+ui&sort=relevance&limit=50&raw_json=1&restrict_sr=on",
             RedditFeedService.buildJsonSearchUrl("android", "compose ui", FeedSort.RELEVANCE)
         )
+    }
+
+    @Test
+    fun blankSearchIsRejectedBeforeNetworkAccess() = runTest {
+        val result = RedditFeedService.searchReddit("   ")
+
+        assertTrue(result.isFailure)
+        assertEquals("Search query cannot be blank", result.exceptionOrNull()?.message)
+    }
+
+    @Test
+    fun invalidSubredditIsRejectedBeforeNetworkAccess() = runTest {
+        val result = RedditFeedService.fetchFeed("android/search")
+
+        assertTrue(result.isFailure)
+        assertEquals("Invalid subreddit name", result.exceptionOrNull()?.message)
     }
 }

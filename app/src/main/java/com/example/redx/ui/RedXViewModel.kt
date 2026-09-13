@@ -21,6 +21,8 @@ import com.example.redx.network.RedditFeedService
 import com.example.redx.network.RedditPostActionService
 import com.example.redx.network.RedditUserService
 import com.example.redx.ui.components.DEFAULT_SUBREDDITS
+import com.example.redx.util.RedditInputValidator
+import com.example.redx.util.RedXLogger
 import com.example.redx.util.UrlSafety
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -36,8 +38,8 @@ data class RedXUiState(
     val posts: List<RedditPost> = emptyList(),
     val isLoading: Boolean = false,
     val isLoadingMore: Boolean = false,
-    val afterToken: String? = null,
     val errorMessage: String? = null,
+    val emptyStateMessage: String? = null,
     val selectedPost: RedditPost? = null,
     val isAccountSheetOpen: Boolean = false,
     val isLoginDialogOpen: Boolean = false,
@@ -151,6 +153,10 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
     private var previousSortBeforeSearch: FeedSort = FeedSort.HOT
     private var previousPostsBeforeSearch: List<RedditPost> = emptyList()
     private var requestGeneration = 0L
+    private var userProfileRequestGeneration = 0L
+    private var postActionGeneration = 0L
+    private val latestVoteRequest = mutableMapOf<String, Long>()
+    private val latestSaveRequest = mutableMapOf<String, Long>()
 
     init {
         val isAlreadyLoggedIn = accountManager.userProfile.value.isLoggedIn
@@ -258,7 +264,8 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(
             posts = filtered,
             filteredPostCount = count,
-            errorMessage = emptyMessage
+            errorMessage = null,
+            emptyStateMessage = emptyMessage
         )
     }
 
@@ -284,6 +291,7 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
                 activeSort = targetSort,
                 isLoading = false,
                 errorMessage = null,
+                emptyStateMessage = null,
                 isSearchActive = false,
                 activeSearchQuery = "",
                 activeFlairFilter = null,
@@ -301,6 +309,7 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
             activeSort = targetSort,
             isLoading = true,
             errorMessage = null,
+            emptyStateMessage = null,
             isSearchActive = false,
             activeSearchQuery = "",
             activeFlairFilter = null,
@@ -333,7 +342,8 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
                         posts = markedPosts,
                         filteredPostCount = filterCount,
                         isLoading = false,
-                        errorMessage = if (markedPosts.isEmpty()) "No posts found in r/$targetSub" else null
+                        errorMessage = null,
+                        emptyStateMessage = if (markedPosts.isEmpty()) "No posts found in r/$targetSub" else null
                     )
                     if (targetSub.equals("home", ignoreCase = true) && accountManager.userProfile.value.isLoggedIn) {
                         val feedSubreddits = fetchedPosts.map { it.subreddit }
@@ -345,8 +355,14 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 },
                 onFailure = { err ->
+                    RedXLogger.warning(
+                        "feed_load_failed",
+                        "subreddit" to targetSub,
+                        "message" to err.localizedMessage
+                    )
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
+                        emptyStateMessage = null,
                         errorMessage = err.localizedMessage ?: "Failed to connect to Reddit"
                     )
                 }
@@ -389,14 +405,23 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
                         _uiState.value = _uiState.value.copy(
                             posts = markedPosts,
                             filteredPostCount = filterCount,
-                            isLoadingMore = false
+                            isLoadingMore = false,
+                            errorMessage = null
                         )
                     } else {
                         _uiState.value = _uiState.value.copy(isLoadingMore = false)
                     }
                 },
-                onFailure = {
-                    _uiState.value = _uiState.value.copy(isLoadingMore = false)
+                onFailure = { err ->
+                    RedXLogger.warning(
+                        "feed_load_more_failed",
+                        "subreddit" to targetSub,
+                        "message" to err.localizedMessage
+                    )
+                    _uiState.value = _uiState.value.copy(
+                        isLoadingMore = false,
+                        errorMessage = err.localizedMessage ?: "Couldn't load more posts"
+                    )
                 }
             )
         }
@@ -440,7 +465,8 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
             searchContentType = SearchContentType.ALL,
             posts = emptyList(),
             filteredPostCount = 0,
-            isLoadingMore = false
+            isLoadingMore = false,
+            emptyStateMessage = null
         )
         rawFetchedPosts = emptyList()
 
@@ -465,12 +491,19 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
                         posts = markedPosts,
                         filteredPostCount = filterCount,
                         isLoading = false,
-                        errorMessage = if (markedPosts.isEmpty()) "No results found for \"$cleanQuery\"" else null
+                        errorMessage = null,
+                        emptyStateMessage = if (markedPosts.isEmpty()) "No results found for \"$cleanQuery\"" else null
                     )
                 },
                 onFailure = { err ->
+                    RedXLogger.warning(
+                        "search_failed",
+                        "queryLength" to cleanQuery.length,
+                        "message" to err.localizedMessage
+                    )
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
+                        emptyStateMessage = null,
                         errorMessage = err.localizedMessage ?: "Search failed"
                     )
                 }
@@ -479,6 +512,8 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun clearSearch(targetSubreddit: String? = null, targetSort: FeedSort? = null) {
+        // Invalidate the in-flight search before restoring the previous feed.
+        ++requestGeneration
         val destSub = targetSubreddit
             ?: if (previousSubredditBeforeSearch.isNotBlank() && !previousSubredditBeforeSearch.equals("search", true)) previousSubredditBeforeSearch
             else "popular"
@@ -502,7 +537,8 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
                 posts = markedPosts,
                 filteredPostCount = filterCount,
                 isLoading = false,
-                errorMessage = null
+                errorMessage = null,
+                emptyStateMessage = null
             )
         } else {
             loadFeed(subreddit = destSub, sort = destSort)
@@ -529,9 +565,10 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
         if (index != -1) {
             val currentPost = currentPosts[index]
             val oldVote = currentPost.userVote
-            val scoreDelta = newVote - oldVote
+            val normalizedVote = newVote.coerceIn(-1, 1)
+            val scoreDelta = normalizedVote - oldVote
             val updatedPost = currentPost.copy(
-                userVote = newVote,
+                userVote = normalizedVote,
                 score = currentPost.score + scoreDelta
             )
             currentPosts[index] = updatedPost
@@ -542,11 +579,18 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
             )
 
             val cookieHeader = accountManager.getCookieHeader()
+            val actionId = ++postActionGeneration
+            latestVoteRequest[post.id] = actionId
             viewModelScope.launch {
-                RedditPostActionService.vote(cookieHeader, updatedPost.id, newVote)
+                RedditPostActionService.vote(cookieHeader, updatedPost.id, normalizedVote)
+                    .onSuccess { if (latestVoteRequest[post.id] == actionId) latestVoteRequest.remove(post.id) }
                     .onFailure {
-                        replacePost(currentPost)
-                        _uiState.value = _uiState.value.copy(errorMessage = "Reddit rejected the vote; your feed was restored")
+                        if (latestVoteRequest[post.id] == actionId) {
+                            replacePost(currentPost)
+                            _uiState.value = _uiState.value.copy(
+                                errorMessage = "Reddit rejected the vote; your feed was restored"
+                            )
+                        }
                     }
             }
         }
@@ -569,12 +613,19 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
 
         if (accountManager.userProfile.value.isLoggedIn) {
             val cookieHeader = accountManager.getCookieHeader()
+            val actionId = ++postActionGeneration
+            latestSaveRequest[post.id] = actionId
             viewModelScope.launch {
                 RedditPostActionService.setSaved(cookieHeader, updatedPost.id, isNowSaved)
+                    .onSuccess { if (latestSaveRequest[post.id] == actionId) latestSaveRequest.remove(post.id) }
                     .onFailure {
-                        savedPostsManager.setPostSaved(currentPost, currentPost.isSaved)
-                        replacePost(currentPost)
-                        _uiState.value = _uiState.value.copy(errorMessage = "Reddit rejected the save; your local bookmark was restored")
+                        if (latestSaveRequest[post.id] == actionId) {
+                            savedPostsManager.setPostSaved(currentPost, currentPost.isSaved)
+                            replacePost(currentPost)
+                            _uiState.value = _uiState.value.copy(
+                                errorMessage = "Reddit rejected the save; your local bookmark was restored"
+                            )
+                        }
                     }
             }
         }
@@ -805,14 +856,30 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun logout() {
-        accountManager.logout()
+        val logoutGeneration = ++requestGeneration
+        userProfileRequestGeneration++
+        latestVoteRequest.clear()
+        latestSaveRequest.clear()
+        rawFetchedPosts = emptyList()
         _uiState.value = _uiState.value.copy(
             isAccountSheetOpen = false,
             activeSubreddit = "popular",
             multiSubredditMode = false,
-            multiSubreddits = emptyList()
+            multiSubreddits = emptyList(),
+            posts = emptyList(),
+            isLoading = true,
+            isLoadingMore = false,
+            errorMessage = null,
+            emptyStateMessage = null,
+            isUserProfileOpen = false,
+            viewedUserName = null,
+            userProfilePosts = emptyList(),
+            isUserProfileLoading = false
         )
-        loadFeed(subreddit = "popular", forceRefresh = true)
+        accountManager.logout {
+            if (logoutGeneration != requestGeneration) return@logout
+            loadFeed(subreddit = "popular", forceRefresh = true)
+        }
     }
 
     // ── Multi-subreddit ──────────────────────────────────────────────────────
@@ -822,8 +889,8 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun enableMultiFeed(subs: List<String>) {
-        val cleaned = subs.map { it.trim().lowercase().removePrefix("r/") }
-            .filter { it.isNotBlank() }
+        val cleaned = subs.mapNotNull(RedditInputValidator::normalizeSubreddit)
+            .map(String::lowercase)
             .take(5)
             .distinct()
         if (cleaned.isEmpty()) return
@@ -848,16 +915,21 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
     // ── User Profile Viewer ──────────────────────────────────────────────────
 
     fun openUserProfile(username: String) {
-        if (username.isBlank() || username.equals("[deleted]", ignoreCase = true)) return
+        val cleanUsername = RedditInputValidator.normalizeUsername(username) ?: return
+        val requestId = ++userProfileRequestGeneration
         _uiState.value = _uiState.value.copy(
-            viewedUserName = username,
+            viewedUserName = cleanUsername,
             isUserProfileOpen = true,
             userProfilePosts = emptyList(),
             isUserProfileLoading = true
         )
         viewModelScope.launch {
             val cookieHeader = accountManager.getCookieHeader()
-            val result = RedditUserService.fetchUserPosts(username, cookieHeader)
+            val result = RedditUserService.fetchUserPosts(cleanUsername, cookieHeader)
+            if (requestId != userProfileRequestGeneration ||
+                !_uiState.value.isUserProfileOpen ||
+                !_uiState.value.viewedUserName.equals(cleanUsername, ignoreCase = true)
+            ) return@launch
             _uiState.value = _uiState.value.copy(
                 userProfilePosts = result.getOrElse { emptyList() },
                 isUserProfileLoading = false
@@ -866,6 +938,7 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun closeUserProfile() {
+        userProfileRequestGeneration++
         _uiState.value = _uiState.value.copy(
             isUserProfileOpen = false,
             viewedUserName = null,
@@ -950,4 +1023,3 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 }
-

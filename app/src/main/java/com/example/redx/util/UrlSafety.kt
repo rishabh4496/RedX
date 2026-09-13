@@ -18,6 +18,18 @@ object UrlSafety {
 
     fun isHttpUrl(rawUrl: String): Boolean = httpUriOrNull(rawUrl) != null
 
+    fun httpsUriOrNull(rawUrl: String): Uri? =
+        httpUriOrNull(rawUrl)?.takeIf { it.scheme.equals("https", ignoreCase = true) }
+
+    fun isHttpsUrl(rawUrl: String): Boolean {
+        val value = rawUrl.trim()
+        if (value.isBlank()) return false
+        return runCatching {
+            val uri = java.net.URI(value)
+            uri.scheme.equals("https", ignoreCase = true) && !uri.host.isNullOrBlank()
+        }.getOrDefault(false)
+    }
+
     fun host(rawUrl: String): String? {
         val uriHost = httpUriOrNull(rawUrl)?.host?.lowercase(Locale.ROOT)?.removePrefix("www.")
         if (!uriHost.isNullOrBlank()) return uriHost
@@ -36,8 +48,7 @@ object UrlSafety {
     }
 
     fun isAllowedHttpsHost(rawUrl: String, vararg allowedHosts: String): Boolean =
-        (rawUrl.trim().startsWith("https://", ignoreCase = true) || httpUriOrNull(rawUrl)?.scheme.equals("https", ignoreCase = true)) &&
-            isAllowedHost(rawUrl, *allowedHosts)
+        httpsUriOrNull(rawUrl) != null && isAllowedHost(rawUrl, *allowedHosts)
 
     fun hasExtension(rawUrl: String, vararg extensions: String): Boolean {
         val cleanUrl = rawUrl.substringBefore('?').substringBefore('#').trim()

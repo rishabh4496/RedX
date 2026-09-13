@@ -665,9 +665,9 @@ fun PostDetailContent(
                             onClick = {
                                 useOldReddit = !useOldReddit
                                 val targetUrl = if (useOldReddit) {
-                                    post.permalink.replace("www.reddit.com", "old.reddit.com")
+                                    baseCommentUrl.replace("www.reddit.com", "old.reddit.com")
                                 } else {
-                                    post.permalink.replace("old.reddit.com", "www.reddit.com")
+                                    baseCommentUrl
                                 }
                                 webViewRef?.loadUrl(targetUrl)
                             },
@@ -740,7 +740,8 @@ fun PostDetailContent(
                                     ): Boolean {
                                         val url = request?.url?.toString() ?: return true
                                         if (!UrlSafety.isAllowedHttpsHost(url, "reddit.com")) {
-                                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                                            val externalUri = UrlSafety.httpUriOrNull(url) ?: return true
+                                            val intent = Intent(Intent.ACTION_VIEW, externalUri).apply {
                                                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
                                             }
                                             runCatching { context.startActivity(intent) }
