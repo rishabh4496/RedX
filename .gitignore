@@ -12,4 +12,9 @@ local.properties
 /captures
 .externalNativeBuild
 .cxx
+*.apk
 *.aab
+*.apks
+*.hprof
+.env
+.env.*

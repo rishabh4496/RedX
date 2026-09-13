@@ -22,7 +22,7 @@
         android:supportsRtl="true"
         android:resizeableActivity="true"
         android:windowSoftInputMode="adjustResize"
-        android:usesCleartextTraffic="true"
+        android:usesCleartextTraffic="false"
         android:hardwareAccelerated="true"
         android:theme="@style/Theme.RedX">
         <activity
