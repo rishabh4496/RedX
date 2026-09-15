@@ -39,6 +39,7 @@ data class RedXUiState(
     val posts: List<RedditPost> = emptyList(),
     val isLoading: Boolean = false,
     val isLoadingMore: Boolean = false,
+    val canLoadMore: Boolean = true,
     val errorMessage: String? = null,
     val emptyStateMessage: String? = null,
     val selectedPost: RedditPost? = null,
@@ -299,12 +300,14 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
                 searchContentType = SearchContentType.ALL,
                 posts = markedPosts,
                 filteredPostCount = filterCount,
-                isLoadingMore = false
+                isLoadingMore = false,
+                canLoadMore = true
             )
             return
         }
 
-        val sameSub = _uiState.value.activeSubreddit.equals(targetSub, ignoreCase = true)
+        val sameSubAndSort = _uiState.value.activeSubreddit.equals(targetSub, ignoreCase = true) &&
+                _uiState.value.activeSort == targetSort
         _uiState.value = _uiState.value.copy(
             activeSubreddit = targetSub,
             activeSort = targetSort,
@@ -315,11 +318,12 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
             activeSearchQuery = "",
             activeFlairFilter = null,
             searchContentType = SearchContentType.ALL,
-            posts = if (sameSub) _uiState.value.posts else emptyList(),
+            posts = if (sameSubAndSort) _uiState.value.posts else emptyList(),
             filteredPostCount = 0,
-            isLoadingMore = false
+            isLoadingMore = false,
+            canLoadMore = true
         )
-        if (!sameSub) {
+        if (!sameSubAndSort) {
             rawFetchedPosts = emptyList()
         }
 
@@ -392,7 +396,7 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun loadMorePosts() {
-        if (_uiState.value.isLoadingMore || _uiState.value.isLoading || rawFetchedPosts.isEmpty()) return
+        if (_uiState.value.isLoadingMore || _uiState.value.isLoading || !_uiState.value.canLoadMore || rawFetchedPosts.isEmpty()) return
         if (_uiState.value.isSearchActive) return // Search results are delivered in full batches
 
         val lastPost = rawFetchedPosts.lastOrNull() ?: return
@@ -421,16 +425,26 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
                     if (newPosts.isNotEmpty()) {
                         val existingIds = rawFetchedPosts.map { it.id }.toSet()
                         val uniqueNewPosts = newPosts.filter { !existingIds.contains(it.id) }
-                        rawFetchedPosts = rawFetchedPosts + uniqueNewPosts
-                        val (markedPosts, filterCount) = filterAndMapPosts(rawFetchedPosts)
-                        _uiState.value = _uiState.value.copy(
-                            posts = markedPosts,
-                            filteredPostCount = filterCount,
-                            isLoadingMore = false,
-                            errorMessage = null
-                        )
+                        if (uniqueNewPosts.isNotEmpty()) {
+                            rawFetchedPosts = rawFetchedPosts + uniqueNewPosts
+                            val (markedPosts, filterCount) = filterAndMapPosts(rawFetchedPosts)
+                            _uiState.value = _uiState.value.copy(
+                                posts = markedPosts,
+                                filteredPostCount = filterCount,
+                                isLoadingMore = false,
+                                errorMessage = null
+                            )
+                        } else {
+                            _uiState.value = _uiState.value.copy(
+                                isLoadingMore = false,
+                                canLoadMore = false
+                            )
+                        }
                     } else {
-                        _uiState.value = _uiState.value.copy(isLoadingMore = false)
+                        _uiState.value = _uiState.value.copy(
+                            isLoadingMore = false,
+                            canLoadMore = false
+                        )
                     }
                 },
                 onFailure = { err ->

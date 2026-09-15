@@ -216,7 +216,24 @@ fun RelayPostCard(
 
                 // Media Preview if available
                 val mediaUrl = post.displayImageUrl
-                if (!mediaUrl.isNullOrBlank()) {
+                if (post.isMediaVideo && !post.videoUrl.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .border(1.dp, AmoledBorder, RoundedCornerShape(8.dp))
+                    ) {
+                        VideoPlayerView(
+                            videoUrl = post.videoUrl,
+                            thumbnailUrl = mediaUrl,
+                            modifier = Modifier.fillMaxSize(),
+                            autoPlay = true,
+                            isMuted = true
+                        )
+                    }
+                } else if (!mediaUrl.isNullOrBlank()) {
                     val targetMedia = if (post.isMediaVideo) (post.videoUrl ?: post.contentUrl) else mediaUrl
                     Spacer(modifier = Modifier.height(10.dp))
                     Box(
@@ -671,7 +688,15 @@ fun FullBleedPostCard(
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             // Background Media
-            if (!mediaUrl.isNullOrBlank()) {
+            if (post.isMediaVideo && !post.videoUrl.isNullOrBlank()) {
+                VideoPlayerView(
+                    videoUrl = post.videoUrl,
+                    thumbnailUrl = mediaUrl,
+                    modifier = Modifier.fillMaxSize(),
+                    autoPlay = true,
+                    isMuted = true
+                )
+            } else if (!mediaUrl.isNullOrBlank()) {
                 AsyncImage(
                     model = ImageRequest.Builder(context)
                         .data(mediaUrl)
@@ -1129,8 +1154,24 @@ fun MagazinePostCard(
                 modifier = Modifier.padding(horizontal = 14.dp)
             )
 
-            // Hero 16:9 Image if present
-            if (!mediaUrl.isNullOrBlank()) {
+            // Hero 16:9 Image/Video if present
+            if (post.isMediaVideo && !post.videoUrl.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                ) {
+                    VideoPlayerView(
+                        videoUrl = post.videoUrl,
+                        thumbnailUrl = mediaUrl,
+                        modifier = Modifier.fillMaxSize(),
+                        autoPlay = true,
+                        isMuted = true
+                    )
+                }
+            } else if (!mediaUrl.isNullOrBlank()) {
                 val targetMedia = if (post.isMediaVideo) (post.videoUrl ?: post.contentUrl) else mediaUrl
                 Spacer(modifier = Modifier.height(10.dp))
                 Box(
@@ -1318,7 +1359,15 @@ fun BigTilesPostCard(
                     .aspectRatio(16f / 9f)
                     .background(Color.Black)
             ) {
-                if (!mediaUrl.isNullOrBlank()) {
+                if (post.isMediaVideo && !post.videoUrl.isNullOrBlank()) {
+                    VideoPlayerView(
+                        videoUrl = post.videoUrl,
+                        thumbnailUrl = mediaUrl,
+                        modifier = Modifier.fillMaxSize(),
+                        autoPlay = true,
+                        isMuted = true
+                    )
+                } else if (!mediaUrl.isNullOrBlank()) {
                     val targetMedia = if (post.isMediaVideo) (post.videoUrl ?: post.contentUrl) else mediaUrl
                     AsyncImage(
                         model = ImageRequest.Builder(context)
@@ -1632,7 +1681,24 @@ fun StreamlinePostCard(
             )
 
             // Rounded Media Container
-            if (!mediaUrl.isNullOrBlank()) {
+            if (post.isMediaVideo && !post.videoUrl.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .border(1.dp, AmoledBorder, RoundedCornerShape(16.dp))
+                ) {
+                    VideoPlayerView(
+                        videoUrl = post.videoUrl,
+                        thumbnailUrl = mediaUrl,
+                        modifier = Modifier.fillMaxSize(),
+                        autoPlay = true,
+                        isMuted = true
+                    )
+                }
+            } else if (!mediaUrl.isNullOrBlank()) {
                 val targetMedia = if (post.isMediaVideo) (post.videoUrl ?: post.contentUrl) else mediaUrl
                 Spacer(modifier = Modifier.height(10.dp))
                 Box(
@@ -1898,7 +1964,24 @@ fun SocialChatPostCard(
                 )
 
                 // Inline Media Card
-                if (!mediaUrl.isNullOrBlank()) {
+                if (post.isMediaVideo && !post.videoUrl.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(180.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(1.dp, AmoledBorder, RoundedCornerShape(12.dp))
+                    ) {
+                        VideoPlayerView(
+                            videoUrl = post.videoUrl,
+                            thumbnailUrl = mediaUrl,
+                            modifier = Modifier.fillMaxSize(),
+                            autoPlay = true,
+                            isMuted = true
+                        )
+                    }
+                } else if (!mediaUrl.isNullOrBlank()) {
                     val targetMedia = if (post.isMediaVideo) (post.videoUrl ?: post.contentUrl) else mediaUrl
                     Spacer(modifier = Modifier.height(10.dp))
                     Box(

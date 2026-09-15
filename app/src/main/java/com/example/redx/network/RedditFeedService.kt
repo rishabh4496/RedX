@@ -7,6 +7,9 @@ import com.example.redx.util.RedditInputValidator
 import com.example.redx.util.UrlSafety
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.Cookie
+import okhttp3.CookieJar
+import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
@@ -25,7 +28,33 @@ import java.util.regex.Pattern
 
 object RedditFeedService {
 
+    private val inMemoryCookieStore = ConcurrentHashMap<String, MutableList<Cookie>>()
+
+    private val cookieJar = object : CookieJar {
+        override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
+            val hostKey = url.host
+            val existing = inMemoryCookieStore.getOrPut(hostKey) { mutableListOf() }
+            synchronized(existing) {
+                cookies.forEach { newCookie ->
+                    existing.removeAll { it.name.equals(newCookie.name, ignoreCase = true) }
+                    existing.add(newCookie)
+                }
+            }
+        }
+
+        override fun loadForRequest(url: HttpUrl): List<Cookie> {
+            val hostKey = url.host
+            val now = System.currentTimeMillis()
+            val list = inMemoryCookieStore[hostKey] ?: return emptyList()
+            return synchronized(list) {
+                list.removeAll { it.expiresAt < now }
+                list.toList()
+            }
+        }
+    }
+
     private val client = OkHttpClient.Builder()
+        .cookieJar(cookieJar)
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
         .followRedirects(true)
@@ -109,6 +138,18 @@ object RedditFeedService {
             return@withContext firstAttempt
         }
 
+        // If network request failed with rate limit (429), do not trigger another immediate request.
+        // Return cached posts if available or return the rate limit error directly.
+        val firstError = firstAttempt.exceptionOrNull()
+        if (firstError?.message?.contains("429") == true) {
+            if (after == null) {
+                feedCache[cacheKey]?.let { cached ->
+                    return@withContext Result.success(cached.posts)
+                }
+            }
+            return@withContext firstAttempt
+        }
+
         // If network request failed but we have a cached copy, return cached posts gracefully
         if (after == null) {
             feedCache[cacheKey]?.let { cached ->
@@ -117,11 +158,17 @@ object RedditFeedService {
         }
 
         // If standard feed is empty or failed (typical for mature/NSFW subreddits that 302 to login),
-        // use the search endpoint with include_over_18=on
+        // use the search endpoint with include_over_18=on.
+        // Note: Reddit search RSS accepts "relevance", "hot", "top", "new". For "rising", use "new".
+        val searchSort = when (safeSort) {
+            FeedSort.RISING -> "new"
+            FeedSort.RELEVANCE -> "relevance"
+            else -> safeSort.apiValue
+        }
         val fallbackSearchUrl = if (cleanSub.isEmpty() || cleanSub.equals("home", true) || cleanSub.equals("popular", true) || cleanSub.equals("all", true)) {
-            "https://www.reddit.com/search.rss?q=*&include_over_18=${if (includeMature) "on" else "off"}&sort=${safeSort.apiValue}&limit=50$afterParam"
+            "https://www.reddit.com/search.rss?q=*&include_over_18=${if (includeMature) "on" else "off"}&sort=$searchSort&limit=50$afterParam"
         } else {
-            "https://www.reddit.com/r/$cleanSub/search.rss?q=*&restrict_sr=on&include_over_18=${if (includeMature) "on" else "off"}&sort=${safeSort.apiValue}&limit=50$afterParam"
+            "https://www.reddit.com/r/$cleanSub/search.rss?q=*&restrict_sr=on&include_over_18=${if (includeMature) "on" else "off"}&sort=$searchSort&limit=50$afterParam"
         }
 
         val searchAttempt = executeRequest(fallbackSearchUrl, cleanSub, cookieHeader, includeMature)

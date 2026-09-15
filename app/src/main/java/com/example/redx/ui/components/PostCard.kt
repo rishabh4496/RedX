@@ -94,7 +94,7 @@ fun PostCard(
     onAuthorClick: ((String) -> Unit)? = null
 ) {
     val context = LocalContext.current
-    var isInlineVideoPlaying by remember { mutableStateOf(false) }
+    var isInlineVideoPlaying by remember { mutableStateOf(true) }
 
     Card(
         modifier = modifier

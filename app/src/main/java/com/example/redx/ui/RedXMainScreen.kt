@@ -47,6 +47,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -1225,6 +1226,57 @@ private fun PostFeedContent(
     onRefresh: () -> Unit,
     onAuthorClick: (String) -> Unit = {}
 ) {
+    val galleryGridState = rememberLazyGridState()
+    val tabletGridState = rememberLazyGridState()
+
+    // Continuous auto-loader for standard feed
+    val shouldLoadMoreList by remember(uiState.posts.size, uiState.isLoading, uiState.isLoadingMore, uiState.canLoadMore) {
+        derivedStateOf {
+            if (uiState.isLoading || uiState.isLoadingMore || !uiState.canLoadMore || uiState.posts.isEmpty()) return@derivedStateOf false
+            val layoutInfo = listState.layoutInfo
+            val total = layoutInfo.totalItemsCount
+            val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            total > 0 && lastVisible >= total - 5
+        }
+    }
+    LaunchedEffect(shouldLoadMoreList) {
+        if (shouldLoadMoreList) {
+            onLoadMore()
+        }
+    }
+
+    // Continuous auto-loader for gallery grid
+    val shouldLoadMoreGallery by remember(uiState.posts.size, uiState.isLoading, uiState.isLoadingMore, uiState.canLoadMore) {
+        derivedStateOf {
+            if (uiState.isLoading || uiState.isLoadingMore || !uiState.canLoadMore || uiState.posts.isEmpty()) return@derivedStateOf false
+            val layoutInfo = galleryGridState.layoutInfo
+            val total = layoutInfo.totalItemsCount
+            val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            total > 0 && lastVisible >= total - 6
+        }
+    }
+    LaunchedEffect(shouldLoadMoreGallery) {
+        if (shouldLoadMoreGallery) {
+            onLoadMore()
+        }
+    }
+
+    // Continuous auto-loader for tablet grid
+    val shouldLoadMoreTablet by remember(uiState.posts.size, uiState.isLoading, uiState.isLoadingMore, uiState.canLoadMore) {
+        derivedStateOf {
+            if (uiState.isLoading || uiState.isLoadingMore || !uiState.canLoadMore || uiState.posts.isEmpty()) return@derivedStateOf false
+            val layoutInfo = tabletGridState.layoutInfo
+            val total = layoutInfo.totalItemsCount
+            val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            total > 0 && lastVisible >= total - 5
+        }
+    }
+    LaunchedEffect(shouldLoadMoreTablet) {
+        if (shouldLoadMoreTablet) {
+            onLoadMore()
+        }
+    }
+
     PullToRefreshBox(
         isRefreshing = uiState.isLoading,
         onRefresh = onRefresh,
@@ -1317,6 +1369,7 @@ private fun PostFeedContent(
             ) { (currentViewMode, currentTabletMagazine) ->
                 if (currentViewMode == FeedViewMode.GALLERY) {
                     LazyVerticalGrid(
+                        state = galleryGridState,
                         columns = GridCells.Adaptive(minSize = 130.dp),
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(4.dp)
@@ -1338,25 +1391,23 @@ private fun PostFeedContent(
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(16.dp),
+                                    .padding(vertical = 20.dp, horizontal = 16.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 if (uiState.isLoadingMore) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        CircularProgressIndicator(color = RedditOrange, modifier = Modifier.size(20.dp))
-                                        Spacer(modifier = Modifier.width(10.dp))
-                                        Text(text = "Loading next posts...", color = TextSecondary, fontSize = 13.sp)
-                                    }
-                                } else {
-                                    Button(
-                                        onClick = onLoadMore,
-                                        colors = ButtonDefaults.buttonColors(containerColor = AmoledSurfaceElevated),
-                                        border = BorderStroke(1.dp, AmoledBorder),
-                                        shape = RoundedCornerShape(20.dp),
-                                        modifier = Modifier.padding(bottom = 30.dp)
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Center
                                     ) {
-                                        Text(text = "Load More Posts", color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                        CircularProgressIndicator(color = RedditOrange, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Text(text = "Loading more posts...", color = TextSecondary, fontSize = 13.sp)
                                     }
+                                } else if (!uiState.canLoadMore) {
+                                    Text(text = "• All caught up •", color = TextTertiary, fontSize = 12.sp, modifier = Modifier.padding(bottom = 20.dp))
+                                } else {
+                                    LaunchedEffect(Unit) { onLoadMore() }
+                                    Spacer(modifier = Modifier.height(20.dp))
                                 }
                             }
                         }
@@ -1364,6 +1415,7 @@ private fun PostFeedContent(
                 } else if (currentTabletMagazine) {
                     // Multi-Column Responsive Grid across wide tablet screen
                     LazyVerticalGrid(
+                        state = tabletGridState,
                         columns = GridCells.Adaptive(minSize = 360.dp),
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(12.dp),
@@ -1393,25 +1445,23 @@ private fun PostFeedContent(
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(16.dp),
+                                    .padding(vertical = 20.dp, horizontal = 16.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 if (uiState.isLoadingMore) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        CircularProgressIndicator(color = RedditOrange, modifier = Modifier.size(20.dp))
-                                        Spacer(modifier = Modifier.width(10.dp))
-                                        Text(text = "Loading next posts...", color = TextSecondary, fontSize = 13.sp)
-                                    }
-                                } else {
-                                    Button(
-                                        onClick = onLoadMore,
-                                        colors = ButtonDefaults.buttonColors(containerColor = AmoledSurfaceElevated),
-                                        border = BorderStroke(1.dp, AmoledBorder),
-                                        shape = RoundedCornerShape(20.dp),
-                                        modifier = Modifier.padding(bottom = 30.dp)
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Center
                                     ) {
-                                        Text(text = "Load More Posts", color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                        CircularProgressIndicator(color = RedditOrange, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Text(text = "Loading more posts...", color = TextSecondary, fontSize = 13.sp)
                                     }
+                                } else if (!uiState.canLoadMore) {
+                                    Text(text = "• All caught up •", color = TextTertiary, fontSize = 12.sp, modifier = Modifier.padding(bottom = 20.dp))
+                                } else {
+                                    LaunchedEffect(Unit) { onLoadMore() }
+                                    Spacer(modifier = Modifier.height(20.dp))
                                 }
                             }
                         }
@@ -1448,25 +1498,23 @@ private fun PostFeedContent(
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(16.dp),
+                                    .padding(vertical = 20.dp, horizontal = 16.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 if (uiState.isLoadingMore) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        CircularProgressIndicator(color = RedditOrange, modifier = Modifier.size(20.dp))
-                                        Spacer(modifier = Modifier.width(10.dp))
-                                        Text(text = "Loading next posts...", color = TextSecondary, fontSize = 13.sp)
-                                    }
-                                } else {
-                                    Button(
-                                        onClick = onLoadMore,
-                                        colors = ButtonDefaults.buttonColors(containerColor = AmoledSurfaceElevated),
-                                        border = BorderStroke(1.dp, AmoledBorder),
-                                        shape = RoundedCornerShape(20.dp),
-                                        modifier = Modifier.padding(bottom = 30.dp)
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Center
                                     ) {
-                                        Text(text = "Load More Posts", color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                        CircularProgressIndicator(color = RedditOrange, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Text(text = "Loading more posts...", color = TextSecondary, fontSize = 13.sp)
                                     }
+                                } else if (!uiState.canLoadMore) {
+                                    Text(text = "• All caught up •", color = TextTertiary, fontSize = 12.sp, modifier = Modifier.padding(bottom = 20.dp))
+                                } else {
+                                    LaunchedEffect(Unit) { onLoadMore() }
+                                    Spacer(modifier = Modifier.height(20.dp))
                                 }
                             }
                         }

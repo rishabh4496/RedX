@@ -12,12 +12,16 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -26,6 +30,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material.icons.Icons
@@ -40,20 +45,30 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import java.util.Locale
+import kotlin.math.abs
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -65,6 +80,13 @@ import androidx.media3.ui.PlayerView
 import com.example.redx.theme.RedditOrange
 import com.example.redx.util.UrlSafety
 import com.example.redx.util.AdBlocker
+
+private fun formatPlayerTime(ms: Long): String {
+    val totalSeconds = (ms / 1000).coerceAtLeast(0)
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    return String.format(Locale.US, "%d:%02d", minutes, seconds)
+}
 
 @OptIn(UnstableApi::class)
 @SuppressLint("SetJavaScriptEnabled")
@@ -126,6 +148,16 @@ fun VideoPlayerView(
         var mutedState by remember { mutableStateOf(isMuted) }
         var currentSpeed by remember { mutableFloatStateOf(1.0f) }
         var isLooping by remember { mutableStateOf(true) }
+        var isPlaying by remember { mutableStateOf(autoPlay) }
+        var isHolding2x by remember { mutableStateOf(false) }
+        var isScrubbing by remember { mutableStateOf(false) }
+        var scrubStartPosition by remember { mutableLongStateOf(0L) }
+        var scrubPosition by remember { mutableLongStateOf(0L) }
+        var currentPosition by remember { mutableLongStateOf(0L) }
+        var duration by remember { mutableLongStateOf(0L) }
+        var seekFeedbackText by remember { mutableStateOf<String?>(null) }
+        var seekFeedbackSide by remember { mutableIntStateOf(0) } // -1 left, 1 right
+        val coroutineScope = rememberCoroutineScope()
 
         val httpDataSourceFactory = remember {
             DefaultHttpDataSource.Factory()
@@ -163,7 +195,14 @@ fun VideoPlayerView(
                             isBuffering = playbackState == Player.STATE_BUFFERING
                             if (playbackState == Player.STATE_READY) {
                                 hasError = false
+                                if (this@apply.duration > 0) {
+                                    duration = this@apply.duration
+                                }
                             }
+                        }
+
+                        override fun onIsPlayingChanged(playing: Boolean) {
+                            isPlaying = playing
                         }
 
                         override fun onPlayerError(error: PlaybackException) {
@@ -201,6 +240,23 @@ fun VideoPlayerView(
                 }
         }
 
+        LaunchedEffect(exoPlayer) {
+            while (isActive) {
+                currentPosition = exoPlayer.currentPosition
+                val dur = exoPlayer.duration
+                if (dur > 0) duration = dur
+                isPlaying = exoPlayer.isPlaying
+                delay(200)
+            }
+        }
+
+        LaunchedEffect(seekFeedbackText) {
+            if (seekFeedbackText != null) {
+                delay(650)
+                seekFeedbackText = null
+            }
+        }
+
         val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
         androidx.compose.runtime.DisposableEffect(lifecycleOwner, exoPlayer) {
             val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
@@ -235,8 +291,8 @@ fun VideoPlayerView(
                 factory = { ctx ->
                     PlayerView(ctx).apply {
                         player = exoPlayer
-                        useController = true
-                        setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
+                        useController = false
+                        setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
                         layoutParams = ViewGroup.LayoutParams(
                             ViewGroup.LayoutParams.MATCH_PARENT,
                             ViewGroup.LayoutParams.MATCH_PARENT
@@ -248,8 +304,200 @@ fun VideoPlayerView(
                 }
             )
 
+            // Touch gesture detector layer (tap, double tap, drag scrub, hold for 2x)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(exoPlayer) {
+                        var lastTapTime = 0L
+                        var lastTapPos = androidx.compose.ui.geometry.Offset.Zero
+
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            val downTime = System.currentTimeMillis()
+                            val downPos = down.position
+                            val isDoubleTapCandidate = (downTime - lastTapTime < 320L) &&
+                                    ((downPos - lastTapPos).getDistance() < 120f)
+
+                            var isHold2xActive = false
+                            var isDragStarted = false
+                            val startScrub = exoPlayer.currentPosition
+                            var dragDistanceX = 0f
+
+                            val holdJob = coroutineScope.launch {
+                                delay(350)
+                                if (!isDragStarted && !isDoubleTapCandidate) {
+                                    isHold2xActive = true
+                                    isHolding2x = true
+                                    exoPlayer.setPlaybackSpeed(2.0f)
+                                }
+                            }
+
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+
+                                if (!change.pressed) {
+                                    holdJob.cancel()
+                                    if (isHold2xActive) {
+                                        isHolding2x = false
+                                        exoPlayer.setPlaybackSpeed(currentSpeed)
+                                    } else if (isDragStarted) {
+                                        exoPlayer.seekTo(scrubPosition)
+                                        isScrubbing = false
+                                    } else if (isDoubleTapCandidate) {
+                                        val width = size.width
+                                        val dur = if (exoPlayer.duration > 0) exoPlayer.duration else 60000L
+                                        if (downPos.x < width * 0.4f) {
+                                            val newPos = maxOf(0L, exoPlayer.currentPosition - 10000L)
+                                            exoPlayer.seekTo(newPos)
+                                            seekFeedbackText = "-10s"
+                                            seekFeedbackSide = -1
+                                        } else if (downPos.x > width * 0.6f) {
+                                            val newPos = minOf(dur, exoPlayer.currentPosition + 10000L)
+                                            exoPlayer.seekTo(newPos)
+                                            seekFeedbackText = "+10s"
+                                            seekFeedbackSide = 1
+                                        } else {
+                                            if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
+                                        }
+                                        lastTapTime = 0L
+                                    } else {
+                                        lastTapTime = downTime
+                                        lastTapPos = downPos
+                                        if (exoPlayer.isPlaying) {
+                                            exoPlayer.pause()
+                                        } else {
+                                            exoPlayer.play()
+                                        }
+                                    }
+                                    break
+                                }
+
+                                val deltaX = change.position.x - downPos.x
+                                val deltaY = change.position.y - downPos.y
+
+                                if (!isDragStarted && !isHold2xActive && abs(deltaX) > 24f && abs(deltaX) > abs(deltaY)) {
+                                    holdJob.cancel()
+                                    isDragStarted = true
+                                    isScrubbing = true
+                                    scrubStartPosition = startScrub
+                                    dragDistanceX = deltaX
+                                    change.consume()
+                                } else if (isDragStarted) {
+                                    change.consume()
+                                    dragDistanceX = change.position.x - downPos.x
+                                    val dur = if (exoPlayer.duration > 0) exoPlayer.duration else 60000L
+                                    val deltaMs = (dragDistanceX * 120f).toLong()
+                                    scrubPosition = (startScrub + deltaMs).coerceIn(0L, dur)
+                                }
+                            }
+                        }
+                    }
+            )
+
             if (isBuffering && !hasError) {
                 CircularProgressIndicator(color = RedditOrange)
+            }
+
+            // Paused State Indicator
+            if (!isPlaying && !isBuffering && !hasError && !isScrubbing) {
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.65f))
+                        .align(Alignment.Center),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = "Play",
+                        tint = Color.White,
+                        modifier = Modifier.size(36.dp)
+                    )
+                }
+            }
+
+            // 2X Speed Hold Pill Indicator
+            if (isHolding2x) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 16.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color.Black.copy(alpha = 0.88f))
+                        .border(1.dp, RedditOrange, RoundedCornerShape(20.dp))
+                        .padding(horizontal = 14.dp, vertical = 6.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Speed,
+                            contentDescription = null,
+                            tint = RedditOrange,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "2X SPEED ▶▶",
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
+            // Drag to Scrub / Seek HUD Overlay
+            if (isScrubbing) {
+                val deltaMs = scrubPosition - scrubStartPosition
+                val deltaSign = if (deltaMs >= 0) "+" else "-"
+                val deltaSec = abs(deltaMs) / 1000
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color.Black.copy(alpha = 0.88f))
+                        .border(1.dp, RedditOrange.copy(alpha = 0.7f), RoundedCornerShape(14.dp))
+                        .padding(horizontal = 18.dp, vertical = 10.dp)
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "${formatPlayerTime(scrubPosition)} / ${formatPlayerTime(duration)}",
+                            color = Color.White,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Text(
+                            text = "[$deltaSign${deltaSec}s]",
+                            color = RedditOrange,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+
+            // Double Tap Jump Feedback (-10s / +10s)
+            if (seekFeedbackText != null) {
+                val align = if (seekFeedbackSide < 0) Alignment.CenterStart else Alignment.CenterEnd
+                Box(
+                    modifier = Modifier
+                        .align(align)
+                        .padding(horizontal = 24.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.75f))
+                        .border(1.dp, RedditOrange, CircleShape)
+                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                ) {
+                    Text(
+                        text = if (seekFeedbackSide < 0) "⏪ $seekFeedbackText" else "$seekFeedbackText ⏩",
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
 
             if (hasError && !isBuffering) {
@@ -280,6 +528,26 @@ fun VideoPlayerView(
                         Text(text = "Retry Stream", fontSize = 12.sp)
                     }
                 }
+            }
+
+            // Bottom Progress Line
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(3.dp)
+                    .background(Color.White.copy(alpha = 0.2f))
+            ) {
+                val progress = if (duration > 0) {
+                    val current = if (isScrubbing) scrubPosition else currentPosition
+                    (current.toFloat() / duration).coerceIn(0f, 1f)
+                } else 0f
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(progress)
+                        .background(RedditOrange)
+                )
             }
 
             // Apollo-Style Quick Floating Bar (Top Right: Audio & Speed controls)
