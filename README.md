@@ -12,6 +12,16 @@ Built using **100% Jetpack Compose**, Material 3 design tokens, hardware-acceler
 
 ---
 
+### 📥 Direct APK Download (v2.2.0)
+| Build | Description | Direct Download |
+|:---|:---|:---|
+| **Release APK** (Recommended) | Fully optimized release build (v2.2.0) — R8 minimized, signed & ready to install | [⬇️ Download `redx.apk`](https://github.com/rishabh4496/RedX/raw/main/redx.apk) |
+| **Release Binary** | Direct mirror of release binary | [⬇️ Download `redx-release.apk`](https://github.com/rishabh4496/RedX/raw/main/redx-release.apk) |
+| **Debug APK** | Developer build with debug logs enabled | [⬇️ Download `redx-debug.apk`](https://github.com/rishabh4496/RedX/raw/main/redx-debug.apk) |
+| **GitHub Releases** | Release tags, changelogs, and APK assets | [🏷️ View v2.2.0 Release](https://github.com/rishabh4496/RedX/releases/tag/v2.2.0) |
+
+---
+
 ## 📸 Screenshots
 
 | AMOLED Feed | Apollo Style | Compact / RIF Style |
