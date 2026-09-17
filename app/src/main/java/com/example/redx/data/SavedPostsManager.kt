@@ -1,6 +1,7 @@
 package com.example.redx.data
 
 import android.content.Context
+import androidx.core.content.edit
 import android.content.SharedPreferences
 import com.example.redx.model.RedditPost
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -92,7 +93,7 @@ class SavedPostsManager(context: Context) {
             }
             array.put(obj)
         }
-        prefs.edit().putString(KEY_SAVED_POSTS, array.toString()).apply()
+        prefs.edit { putString(KEY_SAVED_POSTS, array.toString()) }
         _savedPosts.value = posts
     }
 
@@ -143,7 +144,7 @@ class SavedPostsManager(context: Context) {
             isNowFav = true
         }
 
-        prefs.edit().putStringSet(KEY_FAVORITES, current.toSet()).apply()
+        prefs.edit { putStringSet(KEY_FAVORITES, current.toSet()) }
         _favoriteSubreddits.value = current
         return isNowFav
     }

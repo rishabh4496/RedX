@@ -23,3 +23,8 @@ local.properties
 *.hprof
 .env
 .env.*
+
+# Release signing material must never be committed.
+keystore.properties
+*.jks
+*.keystore

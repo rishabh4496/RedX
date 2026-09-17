@@ -1,6 +1,7 @@
 package com.example.redx.theme
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.runtime.mutableStateOf
 
 /**
  * Colors used by the custom feed components. The property names are kept for
@@ -29,7 +30,8 @@ data class RedXPalette(
 )
 
 internal object RedXPaletteState {
-    var current: RedXPalette = RedXPalette(
+    private val state = mutableStateOf(
+        RedXPalette(
         background = Color(0xFF090B0E),
         surface = Color(0xFF13171C),
         surfaceElevated = Color(0xFF1B2129),
@@ -49,7 +51,18 @@ internal object RedXPaletteState {
         flairText = Color(0xFF80CBC4),
         nsfw = Color(0xFFE53935),
         spoiler = Color(0xFF546E7A)
+        )
     )
+
+    /**
+     * Backed by Compose snapshot state so that changing the app theme recomposes every
+     * component that reads the palette convenience properties below.
+     */
+    var current: RedXPalette
+        get() = state.value
+        set(value) {
+            if (state.value != value) state.value = value
+        }
 }
 
 val AmoledBackground: Color get() = RedXPaletteState.current.background

@@ -1,6 +1,7 @@
 ﻿package com.example.redx.data
 
 import android.content.Context
+import androidx.core.content.edit
 import android.content.SharedPreferences
 import com.example.redx.model.ReadLaterEntry
 import com.example.redx.model.RedditPost
@@ -55,7 +56,7 @@ class ReadLaterManager(context: Context) {
             }
             array.put(obj)
         }
-        prefs.edit().putString(KEY_QUEUE, array.toString()).apply()
+        prefs.edit { putString(KEY_QUEUE, array.toString()) }
     }
 
     fun isQueued(postId: String): Boolean =
@@ -84,7 +85,7 @@ class ReadLaterManager(context: Context) {
 
     fun clearQueue() {
         _queue.value = emptyList()
-        prefs.edit().remove(KEY_QUEUE).apply()
+        prefs.edit { remove(KEY_QUEUE) }
     }
 
     companion object {

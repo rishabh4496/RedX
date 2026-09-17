@@ -1,6 +1,7 @@
 package com.example.redx.data
 
 import android.content.Context
+import androidx.core.content.edit
 import android.content.SharedPreferences
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -39,7 +40,7 @@ class RecentSubredditsManager(context: Context) {
     private fun persist(list: List<String>) {
         val array = JSONArray()
         list.take(20).forEach { array.put(it) }
-        prefs.edit().putString(KEY_RECENTS, array.toString()).apply()
+        prefs.edit { putString(KEY_RECENTS, array.toString()) }
     }
 
     fun recordVisit(subreddit: String) {
@@ -64,7 +65,7 @@ class RecentSubredditsManager(context: Context) {
 
     fun clearRecent() {
         _recentSubreddits.value = emptyList()
-        prefs.edit().remove(KEY_RECENTS).apply()
+        prefs.edit { remove(KEY_RECENTS) }
     }
 
     companion object {

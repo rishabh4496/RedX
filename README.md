@@ -1,7 +1,7 @@
 # RedX 🚀 — Next-Gen Modern Reddit Client for Android
 
-[![Kotlin](https://img.shields.io/badge/Kotlin-2.3.20-7F52FF.svg?style=flat&logo=kotlin)](https://kotlinlang.org)
-[![Compose](https://img.shields.io/badge/Jetpack%20Compose-2026.03-4285F4.svg?style=flat&logo=android)](https://developer.android.com/jetpack/compose)
+[![Kotlin](https://img.shields.io/badge/Kotlin-2.4.20-7F52FF.svg?style=flat&logo=kotlin)](https://kotlinlang.org)
+[![Compose](https://img.shields.io/badge/Jetpack%20Compose-2026.09-4285F4.svg?style=flat&logo=android)](https://developer.android.com/jetpack/compose)
 [![Material 3](https://img.shields.io/badge/Material%203-Latest-006C4C.svg?style=flat)](https://m3.material.io)
 [![Platform](https://img.shields.io/badge/Platform-Android%208.0%2B-3DDC84.svg?style=flat&logo=android)](https://www.android.com)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -12,13 +12,32 @@ Built using **100% Jetpack Compose**, Material 3 design tokens, hardware-acceler
 
 ---
 
-### 📥 Direct APK Download (v2.2.0)
+### 📥 Direct APK Download (v2.3.0)
 | Build | Description | Direct Download |
 |:---|:---|:---|
-| **Release APK** (Recommended) | Fully optimized release build (v2.2.0) — R8 minimized, signed & ready to install | [⬇️ Download `redx.apk`](https://github.com/rishabh4496/RedX/raw/main/redx.apk) |
+| **Release APK** (Recommended) | R8-minified, resource-shrunk, release-signed — **3.3 MB**, down from 16.8 MB | [⬇️ Download `redx.apk`](https://github.com/rishabh4496/RedX/raw/main/redx.apk) |
 | **Release Binary** | Direct mirror of release binary | [⬇️ Download `redx-release.apk`](https://github.com/rishabh4496/RedX/raw/main/redx-release.apk) |
-| **Debug APK** | Developer build with debug logs enabled | [⬇️ Download `redx-debug.apk`](https://github.com/rishabh4496/RedX/raw/main/redx-debug.apk) |
-| **GitHub Releases** | Release tags, changelogs, and APK assets | [🏷️ View v2.2.0 Release](https://github.com/rishabh4496/RedX/releases/tag/v2.2.0) |
+| **Debug APK** | Developer build, installs alongside release as `com.example.redx.debug` | [⬇️ Download `redx-debug.apk`](https://github.com/rishabh4496/RedX/raw/main/redx-debug.apk) |
+| **GitHub Releases** | Release tags, changelogs, and APK assets | [🏷️ View Releases](https://github.com/rishabh4496/RedX/releases) |
+
+---
+
+## 🩹 What's New in v2.3.0 — Audit & Stability Release
+
+A full source audit of v2.2.0. See **[AUDIT.md](AUDIT.md)** for the complete
+issue-by-issue breakdown.
+
+| Area | Change |
+|:---|:---|
+| **Stability** | Removed all 12 force-unwrap (`!!`) crash sites in the UI and feed layer |
+| **Theming** | Theme switches now repaint the whole app instantly instead of leaving stale colors |
+| **Navigation** | 6 of 9 toolbar actions were scrolled off-screen; now a proper overflow menu |
+| **Media** | Videos no longer auto-restart after backgrounding; polling loop no longer drains battery while paused |
+| **Messaging** | Error banners auto-dismiss after 5s instead of sticking for the session |
+| **Size** | Release APK **16.8 MB → 3.3 MB** via R8 + resource shrinking |
+| **Security** | Release builds no longer ship with the public debug signing key |
+| **Quality** | Android Lint findings **46 → 0**; unit tests 23 → 29 |
+| **Platform** | compileSdk/targetSdk 37, Kotlin 2.4.20, Compose BOM 2026.09, Media3 1.11.1, OkHttp 5.5 |
 
 ---
 
@@ -97,13 +116,14 @@ Switch seamlessly between different viewing ergonomics:
 
 ## 🛠️ Architecture & Tech Stack
 
-- **Language**: Kotlin 2.3.20 (JVM Toolchain 17)
-- **UI Framework**: Jetpack Compose (BOM 2026.03.01) + Material 3
+- **Language**: Kotlin 2.4.20 (JVM Toolchain 17)
+- **UI Framework**: Jetpack Compose (BOM 2026.09.00) + Material 3
 - **Asynchronous Logic**: Kotlin Coroutines & `StateFlow`
-- **Networking**: OkHttp 5.3
+- **Networking**: OkHttp 5.5
 - **Image Loading**: Coil 2.7 with GIF & SVG decoders
-- **Media Playback**: AndroidX Media3 ExoPlayer 1.11.0 (Core, HLS, DASH, UI)
+- **Media Playback**: AndroidX Media3 ExoPlayer 1.11.1 (Core, HLS, DASH, UI)
 - **Architecture**: MVI / Single-State ViewModel pattern (`RedXUiState`)
+- **Release build**: R8 full mode with resource shrinking
 
 ---
 
@@ -112,7 +132,7 @@ Switch seamlessly between different viewing ergonomics:
 ### Prerequisites
 - Android Studio Ladybug / Meerkat or newer
 - JDK 17
-- Android SDK 36 (Platform 36, Build Tools 36.0.0)
+- Android SDK 37 (Platform 37, Build Tools 36.0.0)
 
 ### Clone & Build
 ```bash
@@ -122,15 +142,32 @@ cd RedX
 # Compile and run unit tests
 ./gradlew testDebugUnitTest
 
+# Static analysis (the project builds clean with zero lint findings)
+./gradlew lintDebug
+
 # Assemble an optimized release APK (unsigned unless signing is configured locally)
 ./gradlew assembleRelease
 ```
 The output APK will be located at:
 `app/build/outputs/apk/release/app-release.apk`
 
-For distributable signed binaries, configure a private release keystore in CI or in
-your local Gradle environment. Release binaries are intentionally published through
-GitHub Releases rather than committed to the source tree.
+### Release signing
+
+Release builds are **never** signed with the debug key. To produce an installable
+binary, provide a keystore through either a git-ignored `keystore.properties` in the
+repository root:
+
+```properties
+storeFile=/absolute/path/to/redx-release.jks
+storePassword=...
+keyAlias=redx
+keyPassword=...
+```
+
+or the equivalent environment variables `REDX_KEYSTORE_FILE`,
+`REDX_KEYSTORE_PASSWORD`, `REDX_KEY_ALIAS`, and `REDX_KEY_PASSWORD`. When no
+keystore is configured the release APK is produced unsigned rather than being
+silently signed with a publicly known key.
 
 ---
 

@@ -1,6 +1,8 @@
 package com.example.redx.data
 
 import android.content.Context
+import androidx.core.content.edit
+import androidx.core.net.toUri
 import android.content.SharedPreferences
 import android.net.Uri
 import com.example.redx.model.RedditPost
@@ -48,7 +50,7 @@ class ContentFilterManager(context: Context) {
         for (item in list) {
             array.put(item)
         }
-        prefs.edit().putString(key, array.toString()).apply()
+        prefs.edit { putString(key, array.toString()) }
     }
 
     fun addBlockedKeyword(keyword: String) {
@@ -83,7 +85,7 @@ class ContentFilterManager(context: Context) {
 
     fun toggleFilterEnabled(enabled: Boolean) {
         _isFilterEnabled.value = enabled
-        prefs.edit().putBoolean(KEY_FILTER_ENABLED, enabled).apply()
+        prefs.edit { putBoolean(KEY_FILTER_ENABLED, enabled) }
     }
 
     fun shouldFilterPost(post: RedditPost): Boolean {
@@ -120,9 +122,9 @@ class ContentFilterManager(context: Context) {
         val raw = value.trim().lowercase(Locale.ROOT)
         if (raw.isBlank()) return null
         val uri = if (raw.startsWith("http://") || raw.startsWith("https://")) {
-            Uri.parse(raw)
+            raw.toUri()
         } else {
-            Uri.parse("https://$raw")
+            "https://$raw".toUri()
         }
         return uri.host?.lowercase(Locale.ROOT)?.removePrefix("www.")?.trimEnd('.')
             ?.takeIf { it.isNotBlank() }

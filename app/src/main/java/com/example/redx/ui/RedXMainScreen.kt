@@ -64,6 +64,7 @@ import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Refresh
@@ -79,6 +80,8 @@ import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -444,7 +447,7 @@ fun RedXMainScreen(
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(text = "Flair Filter: ", color = TextSecondary, fontSize = 12.sp)
-                                    Text(text = uiState.activeFlairFilter!!, color = FlairText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    Text(text = uiState.activeFlairFilter.orEmpty(), color = FlairText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                 }
                                 Box(
                                     modifier = Modifier
@@ -669,15 +672,17 @@ fun RedXMainScreen(
                                         )
                                     }
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "✕",
-                                        color = TextSecondary,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier
-                                            .clickable { viewModel.clearError() }
-                                            .padding(4.dp)
-                                    )
+                                    IconButton(
+                                        onClick = { viewModel.clearError() },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Close,
+                                            contentDescription = "Dismiss message",
+                                            tint = TextSecondary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -761,10 +766,11 @@ fun RedXMainScreen(
                                     .fillMaxHeight()
                                     .background(AmoledBackground)
                             ) {
-                                if (uiState.selectedPost != null) {
-                                    androidx.compose.runtime.key(uiState.selectedPost!!.id) {
+                                val tabletDetailPost = uiState.selectedPost
+                                if (tabletDetailPost != null) {
+                                    androidx.compose.runtime.key(tabletDetailPost.id) {
                                         PostDetailContent(
-                                            post = uiState.selectedPost!!,
+                                            post = tabletDetailPost,
                                             onVote = { p, vote -> viewModel.vote(p, vote) },
                                             onToggleSave = { p -> viewModel.toggleSave(p) },
                                             onDismiss = { viewModel.selectPost(null) },
@@ -871,10 +877,11 @@ fun RedXMainScreen(
         }
 
         // Modal Sheet Reader for Phone mode OR Tablet Magazine mode
-        if (showDetailModal) {
-            androidx.compose.runtime.key(uiState.selectedPost!!.id) {
+        val detailModalPost = uiState.selectedPost
+        if (showDetailModal && detailModalPost != null) {
+            androidx.compose.runtime.key(detailModalPost.id) {
                 PostDetailSheet(
-                    post = uiState.selectedPost!!,
+                    post = detailModalPost,
                     onDismiss = { viewModel.selectPost(null) },
                     onVote = { p, vote -> viewModel.vote(p, vote) },
                     onToggleSave = { p -> viewModel.toggleSave(p) },
@@ -896,9 +903,10 @@ fun RedXMainScreen(
         )
     }
 
-    if (uiState.quickActionsPost != null) {
+    val quickActionsPost = uiState.quickActionsPost
+    if (quickActionsPost != null) {
         PostQuickActionsSheet(
-            post = uiState.quickActionsPost!!,
+            post = quickActionsPost,
             onDismiss = { viewModel.closeQuickActions() },
             onToggleSave = { viewModel.toggleSave(it) },
             onToggleRead = { viewModel.togglePostRead(it) },
@@ -1065,9 +1073,10 @@ fun RedXMainScreen(
         )
     }
 
-    if (uiState.isUserProfileOpen && uiState.viewedUserName != null) {
+    val viewedUserName = uiState.viewedUserName
+    if (uiState.isUserProfileOpen && viewedUserName != null) {
         UserProfileSheet(
-            username = uiState.viewedUserName!!,
+            username = viewedUserName,
             posts = uiState.userProfilePosts,
             isLoading = uiState.isUserProfileLoading,
             onPostClick = { post ->
@@ -1078,12 +1087,13 @@ fun RedXMainScreen(
         )
     }
 
-    if (uiState.isCrosspostDialogOpen && uiState.crosspostTargetPost != null) {
+    val crosspostTargetPost = uiState.crosspostTargetPost
+    if (uiState.isCrosspostDialogOpen && crosspostTargetPost != null) {
         CrosspostDialog(
-            post = uiState.crosspostTargetPost!!,
+            post = crosspostTargetPost,
             suggestedSubreddits = displayedSubreddits,
             onConfirm = { targetSub, title ->
-                viewModel.submitCrosspost(uiState.crosspostTargetPost!!, targetSub, title)
+                viewModel.submitCrosspost(crosspostTargetPost, targetSub, title)
             },
             onDismiss = { viewModel.closeCrosspostDialog() }
         )
@@ -1757,12 +1767,13 @@ private fun PostFeedItemRenderer(
 private fun FeedPanel(
     uiState: RedXUiState,
     userProfile: UserProfile,
-    displayedSubreddits: List<String> = com.example.redx.ui.components.DEFAULT_SUBREDDITS,
     listState: LazyListState,
     onPostClick: (RedditPost) -> Unit,
     onVote: (RedditPost, Int) -> Unit,
     onToggleSave: (RedditPost) -> Unit,
     onSubredditClick: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    displayedSubreddits: List<String> = com.example.redx.ui.components.DEFAULT_SUBREDDITS,
     onSwitchSubreddit: (Int) -> Unit = {},
     onOpenSearch: () -> Unit,
     onOpenSubredditPicker: () -> Unit,
@@ -1788,8 +1799,7 @@ private fun FeedPanel(
     selectedPostId: String?,
     onOpenMultiPicker: () -> Unit = {},
     onDisableMultiFeed: () -> Unit = {},
-    onAuthorClick: (String) -> Unit = {},
-    modifier: Modifier = Modifier
+    onAuthorClick: (String) -> Unit = {}
 ) {
     val phoneInfiniteTransition = rememberInfiniteTransition(label = "phoneRefreshRotation")
     val phoneRawRotation by phoneInfiniteTransition.animateFloat(
@@ -1839,66 +1849,21 @@ private fun FeedPanel(
 
                     Spacer(modifier = Modifier.width(6.dp))
 
+                    // Only the highest-frequency actions stay on the bar; everything else
+                    // moves into an overflow menu. The previous horizontally scrolling row
+                    // pushed 6 of 9 actions off-screen on ordinary phone widths with no
+                    // visual hint that they existed.
+                    var isOverflowMenuOpen by remember { mutableStateOf(false) }
                     Row(
-                        modifier = Modifier
-                            .weight(1f)
-                            .horizontalScroll(rememberScrollState()),
+                        modifier = Modifier.weight(1f),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.End
                     ) {
-                        IconButton(onClick = onCycleViewMode) {
-                            Icon(
-                                imageVector = getFeedViewModeIcon(uiState.viewMode),
-                                contentDescription = "Switch View (${uiState.viewMode.label})",
-                                tint = RedditOrange
-                            )
-                        }
-
-                        IconButton(onClick = onSweepReadPosts) {
-                            Icon(
-                                imageVector = if (uiState.hideReadPosts) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                contentDescription = if (uiState.hideReadPosts) "Show Read Posts" else "Hide Read Posts",
-                                tint = if (uiState.hideReadPosts) RedditOrange else TextSecondary
-                            )
-                        }
-
-                        IconButton(onClick = onOpenFilters) {
-                            Icon(
-                                imageVector = Icons.Default.FilterAlt,
-                                contentDescription = "Content Filters",
-                                tint = if (uiState.filteredPostCount > 0) RedditOrange else TextSecondary
-                            )
-                        }
-
-                        IconButton(onClick = onOpenSaved) {
-                            Icon(
-                                imageVector = Icons.Default.Bookmark,
-                                contentDescription = "Saved Posts",
-                                tint = TextPrimary
-                            )
-                        }
-
                         IconButton(onClick = onOpenSearch) {
                             Icon(
                                 imageVector = Icons.Default.Search,
                                 contentDescription = "Search Reddit",
                                 tint = TextPrimary
-                            )
-                        }
-
-                        IconButton(onClick = onOpenSubredditPicker) {
-                            Icon(
-                                imageVector = Icons.Default.Tag,
-                                contentDescription = "Jump to Subreddit",
-                                tint = TextSecondary
-                            )
-                        }
-
-                        IconButton(onClick = onOpenAppearance) {
-                            Icon(
-                                imageVector = Icons.Default.Settings,
-                                contentDescription = "Settings",
-                                tint = TextSecondary
                             )
                         }
 
@@ -1927,6 +1892,113 @@ private fun FeedPanel(
                                             .background(Color(0xFF4CAF50))
                                     )
                                 }
+                            }
+                        }
+
+                        Box {
+                            IconButton(onClick = { isOverflowMenuOpen = true }) {
+                                Icon(
+                                    imageVector = Icons.Default.MoreVert,
+                                    contentDescription = "More actions",
+                                    tint = TextPrimary
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = isOverflowMenuOpen,
+                                onDismissRequest = { isOverflowMenuOpen = false },
+                                containerColor = AmoledSurfaceElevated,
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, AmoledBorder)
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("View: ${uiState.viewMode.label}", color = TextPrimary) },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = getFeedViewModeIcon(uiState.viewMode),
+                                            contentDescription = null,
+                                            tint = RedditOrange
+                                        )
+                                    },
+                                    onClick = {
+                                        isOverflowMenuOpen = false
+                                        onCycleViewMode()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            text = if (uiState.hideReadPosts) "Show read posts" else "Hide read posts",
+                                            color = TextPrimary
+                                        )
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = if (uiState.hideReadPosts) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                            contentDescription = null,
+                                            tint = if (uiState.hideReadPosts) RedditOrange else TextSecondary
+                                        )
+                                    },
+                                    onClick = {
+                                        isOverflowMenuOpen = false
+                                        onSweepReadPosts()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Content filters", color = TextPrimary) },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Default.FilterAlt,
+                                            contentDescription = null,
+                                            tint = if (uiState.filteredPostCount > 0) RedditOrange else TextSecondary
+                                        )
+                                    },
+                                    onClick = {
+                                        isOverflowMenuOpen = false
+                                        onOpenFilters()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Saved posts", color = TextPrimary) },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Default.Bookmark,
+                                            contentDescription = null,
+                                            tint = TextSecondary
+                                        )
+                                    },
+                                    onClick = {
+                                        isOverflowMenuOpen = false
+                                        onOpenSaved()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Jump to subreddit", color = TextPrimary) },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Default.Tag,
+                                            contentDescription = null,
+                                            tint = TextSecondary
+                                        )
+                                    },
+                                    onClick = {
+                                        isOverflowMenuOpen = false
+                                        onOpenSubredditPicker()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Settings", color = TextPrimary) },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Default.Settings,
+                                            contentDescription = null,
+                                            tint = TextSecondary
+                                        )
+                                    },
+                                    onClick = {
+                                        isOverflowMenuOpen = false
+                                        onOpenAppearance()
+                                    }
+                                )
                             }
                         }
                     }
@@ -1969,15 +2041,17 @@ private fun FeedPanel(
                                 )
                             }
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "✕",
-                                color = TextSecondary,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier
-                                    .clickable { onClearError() }
-                                    .padding(4.dp)
-                            )
+                            IconButton(
+                                onClick = onClearError,
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Dismiss message",
+                                    tint = TextSecondary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
                         }
                     }
                 }

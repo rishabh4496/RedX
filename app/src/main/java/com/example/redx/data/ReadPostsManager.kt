@@ -1,6 +1,7 @@
 package com.example.redx.data
 
 import android.content.Context
+import androidx.core.content.edit
 import android.content.SharedPreferences
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -35,7 +36,7 @@ class ReadPostsManager(context: Context) {
         for (id in bounded) {
             array.put(id)
         }
-        prefs.edit().putString(KEY_READ_IDS, array.toString()).apply()
+        prefs.edit { putString(KEY_READ_IDS, array.toString()) }
     }
 
     private fun boundReadIds(ids: Set<String>): Set<String> =
@@ -71,7 +72,7 @@ class ReadPostsManager(context: Context) {
 
     fun clearAllReadPosts() {
         _readPostIds.value = emptySet()
-        prefs.edit().remove(KEY_READ_IDS).apply()
+        prefs.edit { remove(KEY_READ_IDS) }
     }
 
     companion object {

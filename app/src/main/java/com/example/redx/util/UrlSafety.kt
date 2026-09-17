@@ -1,6 +1,7 @@
 package com.example.redx.util
 
 import android.net.Uri
+import androidx.core.net.toUri
 import java.util.Locale
 
 /** Small URL helpers shared by network, WebView, and external-link code paths. */
@@ -10,7 +11,7 @@ object UrlSafety {
         val value = rawUrl.trim()
         if (value.isBlank()) return null
 
-        val uri = runCatching { Uri.parse(value) }.getOrNull() ?: return null
+        val uri = runCatching { value.toUri() }.getOrNull() ?: return null
         val scheme = uri.scheme?.lowercase(Locale.ROOT)
         return uri.takeIf { scheme == "http" || scheme == "https" }
             ?.takeIf { !it.host.isNullOrBlank() }

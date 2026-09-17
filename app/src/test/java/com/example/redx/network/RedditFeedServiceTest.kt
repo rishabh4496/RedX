@@ -55,4 +55,44 @@ class RedditFeedServiceTest {
         assertTrue(result.isFailure)
         assertEquals("Invalid subreddit name", result.exceptionOrNull()?.message)
     }
+
+    @Test
+    fun relevanceSortFallsBackToHotForListingFeeds() {
+        assertEquals(
+            "https://www.reddit.com/r/android/.rss?limit=50",
+            RedditFeedService.buildFeedUrl("android", FeedSort.RELEVANCE)
+        )
+        assertEquals(
+            "https://www.reddit.com/r/android/hot.json?limit=50&raw_json=1",
+            RedditFeedService.buildJsonFeedUrl("android", FeedSort.RELEVANCE)
+        )
+    }
+
+    @Test
+    fun risingSearchSortDegradesToNew() {
+        assertEquals(
+            "https://www.reddit.com/search.json?q=compose&sort=new&limit=50&raw_json=1",
+            RedditFeedService.buildJsonSearchUrl(null, "compose", FeedSort.RISING)
+        )
+    }
+
+    @Test
+    fun homeFeedUsesFrontPageEndpoints() {
+        assertEquals(
+            "https://www.reddit.com/.rss?limit=50",
+            RedditFeedService.buildFeedUrl("home", FeedSort.HOT)
+        )
+        assertEquals(
+            "https://www.reddit.com/top.json?limit=50&raw_json=1",
+            RedditFeedService.buildJsonFeedUrl("home", FeedSort.TOP)
+        )
+    }
+
+    @Test
+    fun searchQueriesAreUrlEncoded() {
+        assertTrue(
+            RedditFeedService.buildJsonSearchUrl("android", "jetpack compose & r8", FeedSort.TOP)
+                .contains("q=jetpack+compose+%26+r8")
+        )
+    }
 }

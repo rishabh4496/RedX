@@ -115,10 +115,10 @@ fun PostDetailContent(
     post: RedditPost,
     onVote: (RedditPost, Int) -> Unit,
     onToggleSave: (RedditPost) -> Unit,
+    modifier: Modifier = Modifier,
     onDismiss: (() -> Unit)? = null,
     isTabletPane: Boolean = false,
-    onOpenLightbox: ((String, String) -> Unit)? = null,
-    modifier: Modifier = Modifier
+    onOpenLightbox: ((String, String) -> Unit)? = null
 ) {
     val context = LocalContext.current
     var selectedTab by remember(post.id) { mutableIntStateOf(0) } // 0: Overview, 1: Discussion

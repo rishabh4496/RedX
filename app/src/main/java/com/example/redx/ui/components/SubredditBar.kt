@@ -59,11 +59,11 @@ val DEFAULT_SUBREDDITS = listOf(
 @Composable
 fun SubredditBar(
     activeSubreddit: String,
-    subreddits: List<String> = DEFAULT_SUBREDDITS,
     onSubredditSelected: (String) -> Unit,
     onOpenCustomPicker: () -> Unit,
-    onOpenMultiPicker: (() -> Unit)? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    subreddits: List<String> = DEFAULT_SUBREDDITS,
+    onOpenMultiPicker: (() -> Unit)? = null
 ) {
     val scrollState = rememberScrollState()
 

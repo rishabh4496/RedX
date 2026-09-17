@@ -1,24 +1,67 @@
+import java.util.Properties
+
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.compose.compiler)
 }
 
+// Optional release signing. Provide keystore.properties (git-ignored) or the matching
+// environment variables in CI; otherwise the release build stays unsigned instead of
+// silently shipping a debug-signed binary.
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) {
+        keystorePropertiesFile.inputStream().use(::load)
+    }
+}
+
+fun signingValue(propertyKey: String, envKey: String): String? =
+    (keystoreProperties.getProperty(propertyKey) ?: System.getenv(envKey))?.takeIf { it.isNotBlank() }
+
+val releaseStoreFilePath = signingValue("storeFile", "REDX_KEYSTORE_FILE")
+val releaseStorePassword = signingValue("storePassword", "REDX_KEYSTORE_PASSWORD")
+val releaseKeyAlias = signingValue("keyAlias", "REDX_KEY_ALIAS")
+val releaseKeyPassword = signingValue("keyPassword", "REDX_KEY_PASSWORD")
+val hasReleaseSigning = listOf(
+    releaseStoreFilePath,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword
+).all { it != null } && file(releaseStoreFilePath!!).exists()
+
 android {
     namespace = "com.example.redx"
-    compileSdk = 36
+    compileSdk = 37
     defaultConfig {
         applicationId = "com.example.redx"
         minSdk = 24
-        targetSdk = 36
-        versionCode = 5
-        versionName = "2.2.0"
+        targetSdk = 37
+        versionCode = 6
+        versionName = "2.3.0"
+        vectorDrawables.useSupportLibrary = true
+    }
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(releaseStoreFilePath!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (hasReleaseSigning) signingConfigs.getByName("release") else null
+        }
+        debug {
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
         }
     }
     compileOptions {
@@ -30,6 +73,12 @@ android {
       aidl = false
       buildConfig = false
       shaders = false
+    }
+
+    lint {
+        warningsAsErrors = false
+        abortOnError = true
+        checkDependencies = true
     }
 
     packaging {

@@ -2,6 +2,7 @@ package com.example.redx.ui
 
 import android.app.Application
 import android.content.Context
+import androidx.core.content.edit
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.redx.auth.RedditAccountManager
@@ -32,6 +33,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
 
 data class RedXUiState(
     val activeSubreddit: String = "popular",
@@ -159,6 +162,23 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
     private var postActionGeneration = 0L
     private val latestVoteRequest = mutableMapOf<String, Long>()
     private val latestSaveRequest = mutableMapOf<String, Long>()
+    private var transientMessageJob: Job? = null
+
+    /**
+     * Shows a short-lived status message. Previously these banners stayed on screen
+     * forever, so a single failed vote kept an error pinned above the feed for the
+     * rest of the session.
+     */
+    private fun showTransientMessage(message: String) {
+        transientMessageJob?.cancel()
+        _uiState.value = _uiState.value.copy(errorMessage = message)
+        transientMessageJob = viewModelScope.launch {
+            delay(TRANSIENT_MESSAGE_MILLIS)
+            if (_uiState.value.errorMessage == message) {
+                _uiState.value = _uiState.value.copy(errorMessage = null)
+            }
+        }
+    }
 
     init {
         val isAlreadyLoggedIn = accountManager.userProfile.value.isLoggedIn
@@ -581,6 +601,7 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun clearError() {
+        transientMessageJob?.cancel()
         _uiState.value = _uiState.value.copy(errorMessage = null)
     }
 
@@ -592,7 +613,7 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
 
     fun vote(post: RedditPost, newVote: Int) {
         if (!accountManager.userProfile.value.isLoggedIn) {
-            _uiState.value = _uiState.value.copy(errorMessage = "Sign in to vote on Reddit")
+            showTransientMessage("Sign in to vote on Reddit")
             return
         }
         val currentPosts = _uiState.value.posts.toMutableList()
@@ -622,9 +643,7 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
                     .onFailure {
                         if (latestVoteRequest[post.id] == actionId) {
                             replacePost(currentPost)
-                            _uiState.value = _uiState.value.copy(
-                                errorMessage = "Reddit rejected the vote; your feed was restored"
-                            )
+                            showTransientMessage("Reddit rejected the vote; your feed was restored")
                         }
                     }
             }
@@ -657,9 +676,7 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
                         if (latestSaveRequest[post.id] == actionId) {
                             savedPostsManager.setPostSaved(currentPost, currentPost.isSaved)
                             replacePost(currentPost)
-                            _uiState.value = _uiState.value.copy(
-                                errorMessage = "Reddit rejected the save; your local bookmark was restored"
-                            )
+                            showTransientMessage("Reddit rejected the save; your local bookmark was restored")
                         }
                     }
             }
@@ -709,7 +726,7 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setHideReadPosts(enabled: Boolean) {
-        prefs.edit().putBoolean("key_hide_read_posts", enabled).apply()
+        prefs.edit { putBoolean("key_hide_read_posts", enabled) }
         _uiState.value = _uiState.value.copy(hideReadPosts = enabled)
         refreshActivePostList()
     }
@@ -796,7 +813,7 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setViewMode(mode: FeedViewMode) {
-        prefs.edit().putString("key_view_mode", mode.name).apply()
+        prefs.edit { putString("key_view_mode", mode.name) }
         _uiState.value = _uiState.value.copy(viewMode = mode, selectedPost = null)
     }
 
@@ -813,12 +830,12 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setAppTheme(theme: AppTheme) {
-        prefs.edit().putString("key_app_theme", theme.name).apply()
+        prefs.edit { putString("key_app_theme", theme.name) }
         _uiState.value = _uiState.value.copy(appTheme = theme)
     }
 
     fun setFontScale(scale: FontScale) {
-        prefs.edit().putString("key_font_scale", scale.name).apply()
+        prefs.edit { putString("key_font_scale", scale.name) }
         _uiState.value = _uiState.value.copy(fontScale = scale)
     }
 
@@ -1000,7 +1017,7 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
 
     fun openCrosspostDialog(post: RedditPost) {
         if (!accountManager.userProfile.value.isLoggedIn) {
-            _uiState.value = _uiState.value.copy(errorMessage = "Sign in to crosspost")
+            showTransientMessage("Sign in to crosspost")
             return
         }
         _uiState.value = _uiState.value.copy(
@@ -1018,7 +1035,7 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
 
     fun submitCrosspost(post: RedditPost, targetSubreddit: String, title: String) {
         if (!accountManager.userProfile.value.isLoggedIn) {
-            _uiState.value = _uiState.value.copy(errorMessage = "Sign in to crosspost")
+            showTransientMessage("Sign in to crosspost")
             return
         }
         closeCrosspostDialog()
@@ -1027,14 +1044,10 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
             RedditPostActionService.crosspost(cookieHeader, post.id, targetSubreddit, title)
                 .fold(
                     onSuccess = {
-                        _uiState.value = _uiState.value.copy(
-                            errorMessage = "✓ Crossposted to r/$targetSubreddit"
-                        )
+                        showTransientMessage("✓ Crossposted to r/$targetSubreddit")
                     },
                     onFailure = { err ->
-                        _uiState.value = _uiState.value.copy(
-                            errorMessage = "Crosspost failed: ${err.localizedMessage ?: "unknown error"}"
-                        )
+                        showTransientMessage("Crosspost failed: ${err.localizedMessage ?: "unknown error"}")
                     }
                 )
         }
@@ -1044,17 +1057,19 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
 
     fun voteComment(commentFullname: String, direction: Int) {
         if (!accountManager.userProfile.value.isLoggedIn) {
-            _uiState.value = _uiState.value.copy(errorMessage = "Sign in to vote on comments")
+            showTransientMessage("Sign in to vote on comments")
             return
         }
         viewModelScope.launch {
             val cookieHeader = accountManager.getCookieHeader()
             RedditPostActionService.vote(cookieHeader, commentFullname, direction)
                 .onFailure {
-                    _uiState.value = _uiState.value.copy(
-                        errorMessage = "Comment vote failed — Reddit rejected the request"
-                    )
+                    showTransientMessage("Comment vote failed — Reddit rejected the request")
                 }
         }
+    }
+
+    private companion object {
+        const val TRANSIENT_MESSAGE_MILLIS = 5_000L
     }
 }

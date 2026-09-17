@@ -1,8 +1,6 @@
 package com.example.redx.ui.components
 
 import android.annotation.SuppressLint
-import android.text.TextUtils
-import android.net.Uri
 import android.view.ViewGroup
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
@@ -64,6 +62,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.net.toUri
+import androidx.core.text.htmlEncode
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -93,8 +93,8 @@ private fun formatPlayerTime(ms: Long): String {
 @Composable
 fun VideoPlayerView(
     videoUrl: String,
-    thumbnailUrl: String? = null,
     modifier: Modifier = Modifier,
+    thumbnailUrl: String? = null,
     autoPlay: Boolean = true,
     isMuted: Boolean = true
 ) {
@@ -182,7 +182,7 @@ fun VideoPlayerView(
             ExoPlayer.Builder(context)
                 .setMediaSourceFactory(mediaSourceFactory)
                 .build().apply {
-                    val mediaItem = MediaItem.fromUri(Uri.parse(resolvedUrl))
+                    val mediaItem = MediaItem.fromUri(resolvedUrl.toUri())
                     setMediaItem(mediaItem)
                     prepare()
                     playWhenReady = autoPlay
@@ -214,17 +214,17 @@ fun VideoPlayerView(
                             if (vId != null && vId.isNotBlank()) {
                                 if (!currentUri.contains("DASH_720") && !currentUri.contains("DASH_480") && !currentUri.contains("DASH_360")) {
                                     val fallback720 = "https://v.redd.it/$vId/DASH_720.mp4?source=fallback"
-                                    setMediaItem(MediaItem.fromUri(Uri.parse(fallback720)))
+                                    setMediaItem(MediaItem.fromUri(fallback720.toUri()))
                                     prepare()
                                     playWhenReady = true
                                 } else if (currentUri.contains("DASH_720")) {
                                     val fallback480 = "https://v.redd.it/$vId/DASH_480.mp4?source=fallback"
-                                    setMediaItem(MediaItem.fromUri(Uri.parse(fallback480)))
+                                    setMediaItem(MediaItem.fromUri(fallback480.toUri()))
                                     prepare()
                                     playWhenReady = true
                                 } else if (currentUri.contains("DASH_480")) {
                                     val fallback360 = "https://v.redd.it/$vId/DASH_360.mp4?source=fallback"
-                                    setMediaItem(MediaItem.fromUri(Uri.parse(fallback360)))
+                                    setMediaItem(MediaItem.fromUri(fallback360.toUri()))
                                     prepare()
                                     playWhenReady = true
                                 } else {
@@ -240,7 +240,15 @@ fun VideoPlayerView(
                 }
         }
 
-        LaunchedEffect(exoPlayer) {
+        // Only poll while something is actually moving. Polling a paused player 5x a
+        // second kept the CPU awake and drained battery in long feed sessions.
+        LaunchedEffect(exoPlayer, isPlaying, isScrubbing) {
+            if (!isPlaying && !isScrubbing) {
+                currentPosition = exoPlayer.currentPosition
+                val stoppedDuration = exoPlayer.duration
+                if (stoppedDuration > 0) duration = stoppedDuration
+                return@LaunchedEffect
+            }
             while (isActive) {
                 currentPosition = exoPlayer.currentPosition
                 val dur = exoPlayer.duration
@@ -248,6 +256,12 @@ fun VideoPlayerView(
                 isPlaying = exoPlayer.isPlaying
                 delay(200)
             }
+        }
+
+        // Keep the mute button in sync when the caller flips the muted default.
+        LaunchedEffect(isMuted) {
+            mutedState = isMuted
+            exoPlayer.volume = if (isMuted) 0f else 1f
         }
 
         LaunchedEffect(seekFeedbackText) {
@@ -259,13 +273,17 @@ fun VideoPlayerView(
 
         val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
         androidx.compose.runtime.DisposableEffect(lifecycleOwner, exoPlayer) {
+            // Remember whether playback was user-paused so returning to the app does not
+            // force-restart a video the user deliberately stopped.
+            var wasPlayingBeforePause = autoPlay
             val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
                 when (event) {
                     androidx.lifecycle.Lifecycle.Event.ON_PAUSE -> {
+                        wasPlayingBeforePause = exoPlayer.isPlaying
                         exoPlayer.pause()
                     }
                     androidx.lifecycle.Lifecycle.Event.ON_RESUME -> {
-                        if (autoPlay) {
+                        if (wasPlayingBeforePause) {
                             exoPlayer.play()
                         }
                     }
@@ -685,7 +703,7 @@ fun VideoPlayerView(
                             val id = safeVideoUrl.substringAfter("redgifs.com/watch/").substringBefore("/").substringBefore("?").trim()
                             if (id.isNotBlank()) "https://www.redgifs.com/ifr/$id" else safeVideoUrl
                         } else safeVideoUrl
-                        val escapedVideoUrl = TextUtils.htmlEncode(iframeUrl)
+                        val escapedVideoUrl = iframeUrl.htmlEncode()
                         val embedHtml = if (iframeUrl.contains("redgifs.com/ifr/")) {
                             "<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1.0'><style>body{margin:0;background:#000;display:flex;justify-content:center;align-items:center;height:100vh;overflow:hidden;}iframe{width:100%;height:100%;border:none;}</style></head><body><iframe src='$escapedVideoUrl' allowfullscreen allow='autoplay'></iframe></body></html>"
                         } else {

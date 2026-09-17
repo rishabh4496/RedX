@@ -5,6 +5,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
@@ -120,7 +121,7 @@ private val MatrixPalette = RedXPalette(
     spoiler = Color(0xFF456B57)
 )
 
-private fun paletteFor(appTheme: AppTheme): RedXPalette = when (appTheme) {
+internal fun paletteFor(appTheme: AppTheme): RedXPalette = when (appTheme) {
     AppTheme.AMOLED_BLACK -> AmoledPalette
     AppTheme.MIDNIGHT_BLUE -> MidnightPalette
     AppTheme.SUNSET_ORANGE -> SunsetPalette
@@ -155,7 +156,9 @@ fun RedXTheme(
 ) {
     val palette = paletteFor(appTheme)
     // Custom feed components use the same palette as Material 3 components.
-    RedXPaletteState.current = palette
+    // Applied in a SideEffect so composition stays side-effect free while the
+    // snapshot-backed palette still recomposes dependent components on change.
+    SideEffect { RedXPaletteState.current = palette }
 
     val baseDensity = LocalDensity.current
     CompositionLocalProvider(

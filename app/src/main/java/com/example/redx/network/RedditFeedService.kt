@@ -116,13 +116,14 @@ object RedditFeedService {
         val hasSessionCookie = !cookieHeader.isNullOrBlank() && cookieHeader.contains("reddit_session", ignoreCase = true)
         if (hasSessionCookie) {
             val jsonUrl = buildJsonFeedUrl(cleanSub, safeSort, after)
-            val jsonAttempt = executeJsonRequest(jsonUrl, cleanSub, cookieHeader, includeMature)
-            if (jsonAttempt.isSuccess && jsonAttempt.getOrNull()?.isNotEmpty() == true) {
-                val posts = jsonAttempt.getOrNull()!!
+            val jsonPosts = executeJsonRequest(jsonUrl, cleanSub, cookieHeader, includeMature)
+                .getOrNull()
+                ?.takeIf { it.isNotEmpty() }
+            if (jsonPosts != null) {
                 if (after == null) {
-                    feedCache[cacheKey] = CacheEntry(posts, System.currentTimeMillis())
+                    feedCache[cacheKey] = CacheEntry(jsonPosts, System.currentTimeMillis())
                 }
-                return@withContext jsonAttempt
+                return@withContext Result.success(jsonPosts)
             }
         }
 
@@ -130,12 +131,12 @@ object RedditFeedService {
         val standardUrl = buildFeedUrl(cleanSub, safeSort) + afterParam
         val firstAttempt = executeRequest(standardUrl, cleanSub, cookieHeader, includeMature)
 
-        if (firstAttempt.isSuccess && firstAttempt.getOrNull()?.isNotEmpty() == true) {
-            val posts = firstAttempt.getOrNull()!!
+        val firstPosts = firstAttempt.getOrNull()?.takeIf { it.isNotEmpty() }
+        if (firstPosts != null) {
             if (after == null) {
-                feedCache[cacheKey] = CacheEntry(posts, System.currentTimeMillis())
+                feedCache[cacheKey] = CacheEntry(firstPosts, System.currentTimeMillis())
             }
-            return@withContext firstAttempt
+            return@withContext Result.success(firstPosts)
         }
 
         // If network request failed with rate limit (429), do not trigger another immediate request.
@@ -171,13 +172,14 @@ object RedditFeedService {
             "https://www.reddit.com/r/$cleanSub/search.rss?q=*&restrict_sr=on&include_over_18=${if (includeMature) "on" else "off"}&sort=$searchSort&limit=50$afterParam"
         }
 
-        val searchAttempt = executeRequest(fallbackSearchUrl, cleanSub, cookieHeader, includeMature)
-        if (searchAttempt.isSuccess && searchAttempt.getOrNull()?.isNotEmpty() == true) {
-            val posts = searchAttempt.getOrNull()!!
+        val searchPosts = executeRequest(fallbackSearchUrl, cleanSub, cookieHeader, includeMature)
+            .getOrNull()
+            ?.takeIf { it.isNotEmpty() }
+        if (searchPosts != null) {
             if (after == null) {
-                feedCache[cacheKey] = CacheEntry(posts, System.currentTimeMillis())
+                feedCache[cacheKey] = CacheEntry(searchPosts, System.currentTimeMillis())
             }
-            return@withContext searchAttempt
+            return@withContext Result.success(searchPosts)
         }
 
         // Return first error or empty result

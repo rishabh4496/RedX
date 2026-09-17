@@ -3,6 +3,7 @@ package com.example.redx.auth
 import android.content.Context
 import android.content.SharedPreferences
 import android.webkit.CookieManager
+import androidx.core.content.edit
 import com.example.redx.model.UserProfile
 import com.example.redx.network.RedditAccountService
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -154,20 +155,19 @@ class RedditAccountManager(private val context: Context) {
                     ?: prefs.getString(KEY_SUBSCRIBED_SUBREDDITS, null)
                         ?.split(",")?.map { it.trim() }?.filter { it.isNotBlank() }
 
-                val editor = prefs.edit()
-                    .putBoolean(KEY_IS_LOGGED_IN, true)
-                    .putString(KEY_USERNAME, account.username)
-                    .putInt(KEY_KARMA, account.totalKarma)
-                    .putInt(KEY_LINK_KARMA, account.linkKarma)
-                    .putInt(KEY_COMMENT_KARMA, account.commentKarma)
-
-                if (account.avatarUrl != null) {
-                    editor.putString(KEY_AVATAR_URL, account.avatarUrl)
+                prefs.edit {
+                    putBoolean(KEY_IS_LOGGED_IN, true)
+                    putString(KEY_USERNAME, account.username)
+                    putInt(KEY_KARMA, account.totalKarma)
+                    putInt(KEY_LINK_KARMA, account.linkKarma)
+                    putInt(KEY_COMMENT_KARMA, account.commentKarma)
+                    if (account.avatarUrl != null) {
+                        putString(KEY_AVATAR_URL, account.avatarUrl)
+                    }
+                    if (!finalSubs.isNullOrEmpty()) {
+                        putString(KEY_SUBSCRIBED_SUBREDDITS, finalSubs.joinToString(","))
+                    }
                 }
-                if (!finalSubs.isNullOrEmpty()) {
-                    editor.putString(KEY_SUBSCRIBED_SUBREDDITS, finalSubs.joinToString(","))
-                }
-                editor.apply()
 
                 _userProfile.value = UserProfile(
                     isLoggedIn = true,
@@ -209,12 +209,12 @@ class RedditAccountManager(private val context: Context) {
         if (subreddits.isEmpty()) return
         val currentSubs = _userProfile.value.subscribedSubreddits.orEmpty()
         val merged = (currentSubs + subreddits).distinctBy(String::lowercase)
-        prefs.edit().putString(KEY_SUBSCRIBED_SUBREDDITS, merged.joinToString(",")).apply()
+        prefs.edit { putString(KEY_SUBSCRIBED_SUBREDDITS, merged.joinToString(",")) }
         _userProfile.value = _userProfile.value.copy(subscribedSubreddits = merged)
     }
 
     fun toggleMatureContent(show: Boolean) {
-        prefs.edit().putBoolean(KEY_SHOW_MATURE, show).apply()
+        prefs.edit { putBoolean(KEY_SHOW_MATURE, show) }
         _userProfile.value = _userProfile.value.copy(showMatureContent = show)
         if (show) primeMatureContentCookies() else clearMatureContentCookies()
     }
@@ -225,10 +225,10 @@ class RedditAccountManager(private val context: Context) {
 
         // Clear the local account state immediately, but wait for WebView's asynchronous
         // cookie removal before restoring the mature-content preference/cookies.
-        prefs.edit()
-            .clear()
-            .putBoolean(KEY_SHOW_MATURE, showMatureContent)
-            .apply()
+        prefs.edit {
+            clear()
+            putBoolean(KEY_SHOW_MATURE, showMatureContent)
+        }
         _userProfile.value = anonymousProfile(showMatureContent)
 
         cookieManager.removeAllCookies {
@@ -258,15 +258,15 @@ class RedditAccountManager(private val context: Context) {
     }
 
     private fun clearPersistedAccount() {
-        prefs.edit()
-            .remove(KEY_IS_LOGGED_IN)
-            .remove(KEY_USERNAME)
-            .remove(KEY_KARMA)
-            .remove(KEY_LINK_KARMA)
-            .remove(KEY_COMMENT_KARMA)
-            .remove(KEY_AVATAR_URL)
-            .remove(KEY_SUBSCRIBED_SUBREDDITS)
-            .apply()
+        prefs.edit {
+            remove(KEY_IS_LOGGED_IN)
+            remove(KEY_USERNAME)
+            remove(KEY_KARMA)
+            remove(KEY_LINK_KARMA)
+            remove(KEY_COMMENT_KARMA)
+            remove(KEY_AVATAR_URL)
+            remove(KEY_SUBSCRIBED_SUBREDDITS)
+        }
     }
 
     private fun anonymousProfile(showMatureContent: Boolean) = UserProfile(

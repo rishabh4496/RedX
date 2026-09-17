@@ -40,12 +40,14 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -107,7 +109,22 @@ fun SettingsSheet(
                     Spacer(Modifier.width(10.dp))
                     Column {
                         Text("RedX Settings", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                        Text("v2.0 • AMOLED Edition", color = RedditOrange, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                        // Read from the package so the label can never drift from the
+                        // actual build again (it was pinned at "v2.0" through v2.2.0).
+                        val versionContext = LocalContext.current
+                        val versionName = remember(versionContext) {
+                            runCatching {
+                                versionContext.packageManager
+                                    .getPackageInfo(versionContext.packageName, 0)
+                                    .versionName
+                            }.getOrNull().orEmpty()
+                        }
+                        Text(
+                            text = if (versionName.isBlank()) "AMOLED Edition" else "v$versionName • AMOLED Edition",
+                            color = RedditOrange,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
                 }
                 IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
