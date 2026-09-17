@@ -469,7 +469,10 @@ fun PostDetailContent(
                             .fillMaxWidth()
                             .height(mediaHeight),
                         autoPlay = true,
-                        isMuted = false
+                        isMuted = false,
+                        onFullscreen = {
+                            onOpenLightbox?.invoke(activeVideoUrl, post.title)
+                        }
                     )
                     Spacer(modifier = Modifier.height(14.dp))
                 } else if (!detailImageUrl.isNullOrBlank()) {

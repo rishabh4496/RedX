@@ -7,6 +7,17 @@ import org.junit.Test
 class RedditInputValidatorTest {
 
     @Test
+    fun normalizesCompositeSubredditTarget() {
+        assertEquals("Android+technology", RedditInputValidator.normalizeSubredditTarget(" r/Android + technology "))
+    }
+
+    @Test
+    fun rejectsMalformedCompositeSubredditTarget() {
+        assertNull(RedditInputValidator.normalizeSubredditTarget("android+bad/name"))
+        assertNull(RedditInputValidator.normalizeSubredditTarget("android+"))
+    }
+
+    @Test
     fun normalizesValidRedditPathSegments() {
         assertEquals("Android", RedditInputValidator.normalizeSubreddit("  r/Android  "))
         assertEquals("alice_example", RedditInputValidator.normalizeUsername("u/alice_example"))

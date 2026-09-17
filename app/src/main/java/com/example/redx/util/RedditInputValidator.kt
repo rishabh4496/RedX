@@ -14,6 +14,16 @@ object RedditInputValidator {
         return clean.takeIf { subredditPattern.matches(it) }
     }
 
+    /** Normalizes a Reddit multi-subreddit path target without accepting arbitrary path syntax. */
+    fun normalizeSubredditTarget(raw: String): String? {
+        val parts = raw.trim().split('+')
+        if (parts.isEmpty() || parts.any { it.isBlank() }) return null
+        return parts.map { normalizeSubreddit(it) }
+            .takeIf { normalized -> normalized.all { it != null } }
+            ?.filterNotNull()
+            ?.joinToString("+")
+    }
+
     fun normalizeUsername(raw: String): String? {
         val clean = raw.trim()
             .removePrefixIgnoreCase("/u/")

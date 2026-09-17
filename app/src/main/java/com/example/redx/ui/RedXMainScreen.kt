@@ -155,10 +155,10 @@ import com.example.redx.ui.components.RelayPostCard
 import com.example.redx.ui.components.SocialChatPostCard
 import com.example.redx.ui.components.StreamlinePostCard
 import com.example.redx.ui.components.TextOnlyPostCard
-import androidx.compose.material.icons.filled.DynamicFeed
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import com.example.redx.ui.components.CrosspostDialog
 import com.example.redx.ui.components.EdgeSubredditSwipeOverlay
+import com.example.redx.ui.components.FeedContextBanner
 import com.example.redx.ui.components.MultiSubredditPickerDialog
 import com.example.redx.ui.components.ReadLaterSheet
 import com.example.redx.ui.components.SwipeablePostCardWrapper
@@ -2056,44 +2056,6 @@ private fun FeedPanel(
                     }
                 }
 
-                if (uiState.multiSubredditMode && uiState.multiSubreddits.isNotEmpty()) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(RedditOrange.copy(alpha = 0.2f))
-                            .border(1.dp, RedditOrange.copy(alpha = 0.5f))
-                            .padding(horizontal = 14.dp, vertical = 7.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.DynamicFeed,
-                                contentDescription = null,
-                                tint = RedditOrange,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(text = "Multi-Feed: ", color = TextSecondary, fontSize = 12.sp)
-                            Text(
-                                text = uiState.multiSubreddits.joinToString(" + "),
-                                color = RedditOrange,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(Color.Black.copy(alpha = 0.35f))
-                                .clickable { onDisableMultiFeed() }
-                                .padding(horizontal = 8.dp, vertical = 2.dp)
-                        ) {
-                            Text(text = "Exit ✕", color = Color.White, fontSize = 11.sp)
-                        }
-                    }
-                }
-
                 if (uiState.activeFlairFilter != null) {
                     Row(
                         modifier = Modifier
@@ -2261,6 +2223,13 @@ private fun FeedPanel(
                         )
                     }
                 } else {
+                    FeedContextBanner(
+                        activeSubreddit = uiState.activeSubreddit,
+                        multiSubreddits = if (uiState.multiSubredditMode) uiState.multiSubreddits else emptyList(),
+                        postCount = uiState.posts.size,
+                        onOpenMultiPicker = onOpenMultiPicker,
+                        onDisableMultiFeed = onDisableMultiFeed
+                    )
                     SubredditBar(
                         activeSubreddit = uiState.activeSubreddit,
                         subreddits = displayedSubreddits,

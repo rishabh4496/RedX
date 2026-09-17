@@ -294,7 +294,12 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
     fun loadFeed(subreddit: String? = null, sort: FeedSort? = null, forceRefresh: Boolean = false) {
         val requestId = ++requestGeneration
         val targetSub = (subreddit ?: _uiState.value.activeSubreddit).ifBlank { "popular" }
-        recentSubredditsManager.recordVisit(targetSub)
+        // A composite target is a transient feed URL, not a single subreddit.
+        // Keep it out of the recent-chip list so it cannot reappear as a giant
+        // `r/foo+bar` chip after leaving multi-feed mode.
+        if (!targetSub.contains("+")) {
+            recentSubredditsManager.recordVisit(targetSub)
+        }
         val targetSort = when {
             sort != null && sort != FeedSort.RELEVANCE -> sort
             _uiState.value.activeSort != FeedSort.RELEVANCE -> _uiState.value.activeSort
@@ -946,7 +951,8 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
             .take(5)
             .distinct()
         if (cleaned.isEmpty()) return
-        val combinedSub = cleaned.joinToString("+")
+        val combinedSub = RedditInputValidator.normalizeSubredditTarget(cleaned.joinToString("+"))
+            ?: return
         _uiState.value = _uiState.value.copy(
             multiSubredditMode = true,
             multiSubreddits = cleaned,

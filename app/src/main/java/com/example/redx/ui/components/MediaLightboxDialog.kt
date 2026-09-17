@@ -31,6 +31,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -45,12 +46,16 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import com.example.redx.theme.RedditOrange
@@ -96,9 +101,27 @@ fun MediaLightboxDialog(
         properties = DialogProperties(
             usePlatformDefaultWidth = false,
             dismissOnBackPress = true,
-            dismissOnClickOutside = false
+            dismissOnClickOutside = false,
+            decorFitsSystemWindows = false
         )
     ) {
+        val dialogView = LocalView.current
+        DisposableEffect(dialogView) {
+            val window = (dialogView.parent as? DialogWindowProvider)?.window
+            val controller = window?.let { WindowCompat.getInsetsController(it, it.decorView) }
+            if (window != null && controller != null) {
+                WindowCompat.setDecorFitsSystemWindows(window, false)
+                controller.hide(WindowInsetsCompat.Type.systemBars())
+                controller.systemBarsBehavior =
+                    androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            }
+            onDispose {
+                if (window != null && controller != null) {
+                    controller.show(WindowInsetsCompat.Type.systemBars())
+                    WindowCompat.setDecorFitsSystemWindows(window, true)
+                }
+            }
+        }
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -108,14 +131,7 @@ fun MediaLightboxDialog(
                 // Fullscreen Video Player Area
                 Box(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .pointerInput(Unit) {
-                            detectTapGestures(
-                                onTap = {
-                                    showControls = !showControls
-                                }
-                            )
-                        },
+                        .fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
                     VideoPlayerView(

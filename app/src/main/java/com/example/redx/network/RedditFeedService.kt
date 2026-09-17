@@ -73,7 +73,7 @@ object RedditFeedService {
     private val feedCache = ConcurrentHashMap<String, CacheEntry>()
 
     fun getCachedFeed(subreddit: String, sort: FeedSort, includeMature: Boolean): List<RedditPost>? {
-        val cleanSub = normalizeSubreddit(subreddit) ?: return null
+        val cleanSub = normalizeSubredditTarget(subreddit) ?: return null
         val safeSort = if (sort == FeedSort.RELEVANCE) FeedSort.HOT else sort
         val key = "$cleanSub:${safeSort.apiValue}:$includeMature"
         val entry = feedCache[key] ?: return null
@@ -95,7 +95,7 @@ object RedditFeedService {
         includeMature: Boolean = true,
         forceRefresh: Boolean = false
     ): Result<List<RedditPost>> = withContext(Dispatchers.IO) {
-        val cleanSub = normalizeSubreddit(subreddit)
+        val cleanSub = normalizeSubredditTarget(subreddit)
             ?: return@withContext Result.failure(IllegalArgumentException("Invalid subreddit name"))
         val safeSort = if (sort == FeedSort.RELEVANCE) FeedSort.HOT else sort
         val cacheKey = "$cleanSub:${safeSort.apiValue}:$includeMature"
@@ -201,7 +201,7 @@ object RedditFeedService {
             return@withContext Result.failure(IllegalArgumentException("Search query cannot be blank"))
         }
 
-        val cleanSub = subreddit?.trim()?.takeIf { it.isNotBlank() }?.let(::normalizeSubreddit)
+        val cleanSub = subreddit?.trim()?.takeIf { it.isNotBlank() }?.let(::normalizeSingleSubreddit)
         if (subreddit != null && !subreddit.isNullOrBlank() && cleanSub == null) {
             return@withContext Result.failure(IllegalArgumentException("Invalid subreddit name"))
         }
@@ -624,8 +624,11 @@ object RedditFeedService {
         }
     }
 
-    private fun normalizeSubreddit(raw: String): String? =
+    private fun normalizeSingleSubreddit(raw: String): String? =
         RedditInputValidator.normalizeSubreddit(raw)
+
+    private fun normalizeSubredditTarget(raw: String): String? =
+        RedditInputValidator.normalizeSubredditTarget(raw)
 
     private fun parseAtomFeed(xml: String, fallbackSubreddit: String): List<RedditPost> {
         val posts = mutableListOf<RedditPost>()

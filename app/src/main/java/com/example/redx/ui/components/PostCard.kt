@@ -32,7 +32,6 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
@@ -289,28 +288,10 @@ fun PostCard(
                         thumbnailUrl = mediaUrl,
                         modifier = Modifier.fillMaxSize(),
                         autoPlay = true,
-                        isMuted = true
+                        isMuted = true,
+                        onFullscreen = { onMediaClick?.invoke(post.videoUrl, post.title) }
                     )
 
-                    // Fullscreen expansion button
-                    IconButton(
-                        onClick = {
-                            onMediaClick?.invoke(post.videoUrl, post.title)
-                        },
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(8.dp)
-                            .clip(CircleShape)
-                            .background(Color.Black.copy(alpha = 0.7f))
-                            .size(32.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Fullscreen,
-                            contentDescription = "Fullscreen",
-                            tint = Color.White,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
                 }
             } else if (!mediaUrl.isNullOrBlank()) {
                 Spacer(modifier = Modifier.height(10.dp))

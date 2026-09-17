@@ -230,7 +230,8 @@ fun RelayPostCard(
                             thumbnailUrl = mediaUrl,
                             modifier = Modifier.fillMaxSize(),
                             autoPlay = true,
-                            isMuted = true
+                            isMuted = true,
+                            onFullscreen = { onMediaClick?.invoke(post.videoUrl, post.title) }
                         )
                     }
                 } else if (!mediaUrl.isNullOrBlank()) {
@@ -694,7 +695,8 @@ fun FullBleedPostCard(
                     thumbnailUrl = mediaUrl,
                     modifier = Modifier.fillMaxSize(),
                     autoPlay = true,
-                    isMuted = true
+                    isMuted = true,
+                    onFullscreen = { onMediaClick?.invoke(post.videoUrl, post.title) }
                 )
             } else if (!mediaUrl.isNullOrBlank()) {
                 AsyncImage(
@@ -1168,7 +1170,8 @@ fun MagazinePostCard(
                         thumbnailUrl = mediaUrl,
                         modifier = Modifier.fillMaxSize(),
                         autoPlay = true,
-                        isMuted = true
+                        isMuted = true,
+                        onFullscreen = { onMediaClick?.invoke(post.videoUrl, post.title) }
                     )
                 }
             } else if (!mediaUrl.isNullOrBlank()) {

@@ -67,12 +67,17 @@ fun SubredditBar(
 ) {
     val scrollState = rememberScrollState()
 
-    val chips = androidx.compose.runtime.remember(subreddits, activeSubreddit) {
+    val availableSubreddits = androidx.compose.runtime.remember(subreddits) {
+        subreddits.filterNot { it.contains("+") }
+    }
+
+    val chips = androidx.compose.runtime.remember(availableSubreddits, activeSubreddit) {
         val cleanActive = activeSubreddit.trim().removePrefix("r/").removePrefix("/")
-        if (cleanActive.isNotBlank() && subreddits.none { it.equals(cleanActive, ignoreCase = true) }) {
-            listOf(cleanActive) + subreddits
+        val isCompositeTarget = cleanActive.contains("+")
+        if (!isCompositeTarget && cleanActive.isNotBlank() && availableSubreddits.none { it.equals(cleanActive, ignoreCase = true) }) {
+            listOf(cleanActive) + availableSubreddits
         } else {
-            subreddits
+            availableSubreddits
         }
     }
 
@@ -140,7 +145,7 @@ fun SubredditBar(
 
         // Subreddit Chips
         chips.forEach { sub ->
-            val isSelected = activeSubreddit.equals(sub, ignoreCase = true)
+            val isSelected = !activeSubreddit.contains("+") && activeSubreddit.equals(sub, ignoreCase = true)
             val backgroundColor by animateColorAsState(
                 targetValue = if (isSelected) RedditOrange else AmoledBorder.copy(alpha = 0.5f),
                 animationSpec = tween(220),

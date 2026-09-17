@@ -95,4 +95,26 @@ class RedditFeedServiceTest {
                 .contains("q=jetpack+compose+%26+r8")
         )
     }
+
+    @Test
+    fun compositeSubredditTargetIsAcceptedAndKeptAsPathSegments() = runTest {
+        val target = "android+technology"
+        assertEquals(
+            "https://www.reddit.com/r/android+technology/.rss?limit=50",
+            RedditFeedService.buildFeedUrl(target, FeedSort.HOT)
+        )
+        assertEquals(
+            "https://www.reddit.com/r/android+technology/new.json?limit=50&raw_json=1",
+            RedditFeedService.buildJsonFeedUrl(target, FeedSort.NEW)
+        )
+
+    }
+
+    @Test
+    fun compositeSubredditTargetRejectsInvalidPathInjection() = runTest {
+        val result = RedditFeedService.fetchFeed("android+bad/name")
+
+        assertTrue(result.isFailure)
+        assertEquals("Invalid subreddit name", result.exceptionOrNull()?.message)
+    }
 }

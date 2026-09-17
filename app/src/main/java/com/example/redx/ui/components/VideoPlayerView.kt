@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material.icons.Icons
@@ -96,7 +97,8 @@ fun VideoPlayerView(
     modifier: Modifier = Modifier,
     thumbnailUrl: String? = null,
     autoPlay: Boolean = true,
-    isMuted: Boolean = true
+    isMuted: Boolean = true,
+    onFullscreen: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val unescapedUrl = remember(videoUrl) {
@@ -575,6 +577,23 @@ fun VideoPlayerView(
                     .padding(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                if (onFullscreen != null) {
+                    IconButton(
+                        onClick = onFullscreen,
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(Color.Black.copy(alpha = 0.7f))
+                            .size(30.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Fullscreen,
+                            contentDescription = "Fullscreen",
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(6.dp))
+                }
                 // 1. Playback Speed Button (Apollo feature: 0.5x, 1x, 1.25x, 1.5x, 2x)
                 Box(
                     modifier = Modifier
