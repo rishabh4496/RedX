@@ -27,7 +27,9 @@ jobs:
           packages: ''
 
       - name: Install Android SDK packages
-        run: sdkmanager "platform-tools" "platforms;android-37" "build-tools;36.0.0"
+        # Android's current package is versioned 37.2, not the invalid
+        # platforms;android-37 alias. The compileSdk value remains 37.
+        run: sdkmanager "platform-tools" "platforms;android-37.2" "build-tools;36.0.0"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
