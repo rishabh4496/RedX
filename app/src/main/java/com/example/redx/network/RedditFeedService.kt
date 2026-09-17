@@ -367,19 +367,27 @@ object RedditFeedService {
         return "$base?q=$encodedQuery&sort=$sortParam&limit=50&raw_json=1$restrict"
     }
 
-    private fun buildCookieHeader(cookieHeader: String?, includeMature: Boolean): String {
-        val cleanCookies = cookieHeader.orEmpty()
+    internal fun buildCookieHeader(cookieHeader: String?, includeMature: Boolean): String {
+        val suppliedCookies = cookieHeader.orEmpty()
+        val hasAuthenticatedSession = suppliedCookies
+            .split(';')
+            .any { it.trim().startsWith("reddit_session=", ignoreCase = true) }
+        val cleanCookies = suppliedCookies
             .split(';')
             .map(String::trim)
             .filter { it.isNotBlank() }
             .filter { cookie ->
-                includeMature || MATURE_COOKIE_NAMES.none {
+                val isMatureCookie = MATURE_COOKIE_NAMES.any {
                     cookie.startsWith("$it=", ignoreCase = true)
                 }
+                !isMatureCookie || (includeMature && hasAuthenticatedSession)
             }
             .toMutableList()
 
-        if (includeMature && cleanCookies.none { it.startsWith("over18=", ignoreCase = true) }) {
+        // Reddit's public RSS endpoint rate-limits anonymous requests that carry
+        // the WebView mature-content cookies. Only add them for an authenticated
+        // session, where they are part of the user's account preference.
+        if (includeMature && hasAuthenticatedSession && cleanCookies.none { it.startsWith("over18=", ignoreCase = true) }) {
             cleanCookies += "over18=1"
             cleanCookies += "mweb_nx_over18=1"
         }

@@ -117,4 +117,37 @@ class RedditFeedServiceTest {
         assertTrue(result.isFailure)
         assertEquals("Invalid subreddit name", result.exceptionOrNull()?.message)
     }
+
+    @Test
+    fun anonymousRequestsDoNotSendMatureCookies() {
+        assertEquals(
+            "",
+            RedditFeedService.buildCookieHeader(
+                "over18=1; mweb_nx_over18=1",
+                includeMature = true
+            )
+        )
+    }
+
+    @Test
+    fun authenticatedRequestsKeepSessionAndMatureCookies() {
+        val cookies = RedditFeedService.buildCookieHeader(
+            "reddit_session=session123",
+            includeMature = true
+        )
+
+        assertTrue(cookies.contains("reddit_session=session123"))
+        assertTrue(cookies.contains("over18=1"))
+        assertTrue(cookies.contains("mweb_nx_over18=1"))
+    }
+
+    @Test
+    fun matureCookiesAreRemovedWhenMatureContentIsDisabled() {
+        val cookies = RedditFeedService.buildCookieHeader(
+            "reddit_session=session123; over18=1; mweb_nx_over18=1",
+            includeMature = false
+        )
+
+        assertTrue(cookies == "reddit_session=session123")
+    }
 }

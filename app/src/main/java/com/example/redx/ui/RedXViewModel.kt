@@ -353,7 +353,11 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         viewModelScope.launch {
-            val cookieHeader = accountManager.getCookieHeader(includeMature)
+            // Anonymous feeds must not inherit stale WebView cookies. Reddit's
+            // public RSS endpoint rate-limits requests carrying mature cookies.
+            val cookieHeader = accountManager.userProfile.value.isLoggedIn
+                .takeIf { it }
+                ?.let { accountManager.getCookieHeader(includeMature) }
             val result = RedditFeedService.fetchFeed(
                 subreddit = targetSub,
                 sort = targetSort,
@@ -434,7 +438,9 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             val includeMature = accountManager.userProfile.value.showMatureContent
-            val cookieHeader = accountManager.getCookieHeader(includeMature)
+            val cookieHeader = accountManager.userProfile.value.isLoggedIn
+                .takeIf { it }
+                ?.let { accountManager.getCookieHeader(includeMature) }
             val result = RedditFeedService.fetchFeed(
                 subreddit = targetSub,
                 sort = targetSort,
@@ -532,7 +538,9 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             val includeMatureSetting = includeMature
-            val cookieHeader = accountManager.getCookieHeader(includeMatureSetting)
+            val cookieHeader = accountManager.userProfile.value.isLoggedIn
+                .takeIf { it }
+                ?.let { accountManager.getCookieHeader(includeMatureSetting) }
             val result = RedditFeedService.searchReddit(
                 query = cleanQuery,
                 subreddit = targetSub,
