@@ -1,14 +1,15 @@
 # RedX v2.3.0 Audit Report
 
-Full audit of the shipped `redx.apk` (v2.2.0) source tree, with every issue found and
-the fix applied in v2.3.0. All changes are verified by `./gradlew testDebugUnitTest
-lintDebug assembleRelease`.
+Full audit of the repository's v2.2.0 source tree and committed `redx.apk`, with the
+issues found and fixes applied in v2.3.0. A separate user-provided APK was not present
+outside the repository, so runtime verification below covers the rebuilt v2.3.0 APK.
+All changes are verified by `./gradlew testDebugUnitTest lintDebug assembleRelease`.
 
 ## Summary
 
 | Metric | v2.2.0 | v2.3.0 |
 | --- | ---: | ---: |
-| Release APK size | 16.8 MB | **3.35 MB** |
+| Release APK size | 16.8 MB | **3.38 MiB signed (3.54 MB decimal)** |
 | Android Lint findings (debug) | 46 | **0** |
 | Force-unwrap (`!!`) sites in UI/network | 12 | **0** |
 | Unit tests | 23 | **29** |
@@ -96,7 +97,7 @@ surface unshrunk.
 
 **Fix:** R8 with resource shrinking enabled, plus real ProGuard rules that keep
 line numbers for readable crash reports and silence the optional OkHttp platform
-providers. Result: **16.8 MB to 3.35 MB, an 80% reduction.**
+providers. Result: **16.8 MB to 3.38 MiB signed (3.54 MB decimal), an 80% reduction.**
 
 ### 10. Debug and release builds could not coexist
 Both used `com.example.redx`, so installing a test build removed the release one.
@@ -174,7 +175,7 @@ artifact, and always uploads the lint HTML report for inspection.
 ./gradlew testDebugUnitTest lintDebug assembleRelease assembleDebug
 BUILD SUCCESSFUL
 29 tests passed, 0 lint findings
-app-release-unsigned.apk  3.35 MB
+app-release.apk  3.38 MiB signed (3.54 MB decimal)
 ```
 
 ### On-device verification
@@ -187,3 +188,13 @@ The signed release APK was installed and exercised on an Android 14 emulator:
 - Switching to Matrix Emerald repaints the dialog *and* the entire feed instantly
   (top bar, chips, sort bar, card accents), confirming the palette reactivity fix,
   and the choice persists across an app restart.
+
+### Scope and remaining limits
+
+- The audit covered the checked-in v2.2.0 implementation and its committed APK, then
+  validated the rebuilt v2.3.0 release on an Android 14 emulator.
+- It did not independently exercise Reddit account authentication, authenticated
+  voting, media playback across every provider, or production API rate-limit behavior.
+- The release APK committed to the repository is signed with a local release keystore;
+  the keystore is intentionally ignored and is not published. Future updates must use
+  the same signing key, or Android will treat them as a different app.
