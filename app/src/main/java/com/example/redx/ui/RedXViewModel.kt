@@ -830,7 +830,11 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
         isVideo: Boolean = false,
         galleryUrls: List<String> = emptyList()
     ) {
-        val detectedVideo = isVideo || !videoUrl.isNullOrBlank() ||
+        // A feed card hands over the post's own video URL; trust that even if the URL has no
+        // telltale extension, so every style opens the full-screen *player* and not an image.
+        val isKnownPostVideo = (_uiState.value.posts + listOfNotNull(_uiState.value.selectedPost, _uiState.value.quickActionsPost))
+            .any { !it.videoUrl.isNullOrBlank() && it.videoUrl == url }
+        val detectedVideo = isVideo || isKnownPostVideo || !videoUrl.isNullOrBlank() ||
             UrlSafety.hasExtension(url, "mp4", "webm", "m3u8", "gifv") ||
             url.contains("v.redd.it", ignoreCase = true) ||
             url.contains("redgifs.com", ignoreCase = true) ||

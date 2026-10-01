@@ -1376,7 +1376,8 @@ fun BigTilesPostCard(
                         modifier = Modifier.fillMaxSize(),
                         autoPlay = true,
                         isMuted = true,
-                        isFeedItem = true
+                        isFeedItem = true,
+                        onFullscreen = { onMediaClick?.invoke(post.videoUrl, post.title) }
                     )
                 } else if (!mediaUrl.isNullOrBlank()) {
                     val targetMedia = if (post.isMediaVideo) (post.videoUrl ?: post.contentUrl) else mediaUrl
@@ -1707,7 +1708,8 @@ fun StreamlinePostCard(
                         modifier = Modifier.fillMaxSize(),
                         autoPlay = true,
                         isMuted = true,
-                        isFeedItem = true
+                        isFeedItem = true,
+                        onFullscreen = { onMediaClick?.invoke(post.videoUrl, post.title) }
                     )
                 }
             } else if (!mediaUrl.isNullOrBlank()) {
@@ -1997,7 +1999,8 @@ fun SocialChatPostCard(
                             modifier = Modifier.fillMaxSize(),
                             autoPlay = true,
                             isMuted = true,
-                            isFeedItem = true
+                            isFeedItem = true,
+                            onFullscreen = { onMediaClick?.invoke(post.videoUrl, post.title) }
                         )
                     }
                 } else if (!mediaUrl.isNullOrBlank()) {

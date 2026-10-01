@@ -36,6 +36,7 @@ Built using **100% Jetpack Compose**, Material 3 design tokens, hardware-acceler
 | **Hide post** | Quick-actions (⋮) → *Hide this post* removes it from every feed; *Unhide all* lives in Content Filters. |
 | **Block subreddit** | Quick-actions → *Block r/…* hides a community everywhere except when you open it yourself; manage the list under Content Filters. |
 | **Recent searches** | The search dialog remembers your last 8 queries (tap to reuse, ✕ to remove, *Clear* to reset). |
+| **Tap video → full screen** | Tapping an inline video opens the full-screen player in every viewing style (Cards, Relay, Full-Bleed, Magazine, Big Tiles, Streamline, Social). Pause, seek, loop and mute live in the full-screen player. |
 | **Remember last feed** | RedX reopens on the subreddit and sort you left, not always Popular/Hot. |
 
 ---

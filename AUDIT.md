@@ -289,3 +289,11 @@ New in this release: Top time range, Hide post, Block subreddit, Recent searches
 Remember-last-feed (see README). Pure logic is covered by `RecentSearchesTest`,
 `ContentFilterRulesTest` and new `RedditFeedServiceTest` cases (time-range URLs and
 per-range cache keys).
+
+### Tap-to-full-screen
+Inline video in Big Tiles, Streamline and Social had no full-screen hook at all, and in the
+other styles a tap only paused the video (and the touch also fell through to the card,
+opening the post behind it). A tap on any inline feed video now opens the full-screen
+player, the poster state does the same, and the tap is consumed so the card underneath does
+not react. The ViewModel also treats any post's own video URL as video, so the lightbox opens
+the player even when the URL has no telltale extension.

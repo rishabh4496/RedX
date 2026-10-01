@@ -52,6 +52,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -147,11 +148,23 @@ fun VideoPlayerView(
     // Previously every video card in the feed created a player immediately.
     val feedAutoplayAllowed = LocalAutoplayVideos.current && isDirectVideo
     var userStartedPlayback by remember(safeVideoUrl) { mutableStateOf(false) }
+    // Read through rememberUpdatedState so gesture handlers (keyed on the player) never call a
+    // stale lambda after recomposition.
+    val currentOnFullscreen by rememberUpdatedState(onFullscreen)
     if (isFeedItem && !feedAutoplayAllowed && !userStartedPlayback) {
         VideoPoster(
             thumbnailUrl = thumbnailUrl,
             modifier = modifier,
-            onPlay = { userStartedPlayback = true }
+            // Tapping a video in the feed opens it full screen; only fall back to playing it
+            // in place when a style provides no full-screen hook.
+            onPlay = {
+                val openFullscreen = currentOnFullscreen
+                if (openFullscreen != null) {
+                    openFullscreen()
+                } else {
+                    userStartedPlayback = true
+                }
+            }
         )
         return
     }
@@ -449,11 +462,18 @@ fun VideoPlayerView(
                                         // A finger that moved (feed scroll) or whose movement the
                                         // parent list consumed is not a tap. Previously scrolling the
                                         // feed with a finger on a video toggled play/pause on release.
+                                        val openFullscreen = currentOnFullscreen
                                         if (isHold2xActive || isDragStarted) {
                                             // handled by the finally block / seek below
                                         } else if (movedBeyondSlop || change.isConsumed) {
                                             // not a tap
+                                        } else if (isFeedItem && openFullscreen != null) {
+                                            // A tap on an inline feed video opens it full screen (in every
+                                            // viewing style). Pause/seek/loop live in the full-screen player.
+                                            change.consume() // keep the card underneath from also opening the post
+                                            openFullscreen()
                                         } else if (isDoubleTapCandidate) {
+                                            change.consume()
                                             val width = size.width
                                             val dur = if (exoPlayer.duration > 0) exoPlayer.duration else 60000L
                                             if (downPos.x < width * 0.4f) {
@@ -472,6 +492,7 @@ fun VideoPlayerView(
                                             // Centre double-tap: the first tap already toggled playback.
                                             lastTapTime = 0L
                                         } else {
+                                            change.consume()
                                             lastTapTime = downTime
                                             lastTapPos = downPos
                                             wasPlayingBeforeFirstTap = exoPlayer.isPlaying
