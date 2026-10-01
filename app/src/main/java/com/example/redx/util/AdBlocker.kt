@@ -52,7 +52,10 @@ object AdBlocker {
                 'shreddit-ad-slot',
                 '[data-testid="ad-container"]',
                 '[data-testid="promoted-post"]',
-                '[data-testid*="ad"]',
+                // Anchored on purpose: a bare *="ad" substring also matches "header",
+                // "thread", "load-more-comments" and deleted real page content.
+                '[data-testid^="ad-"]',
+                '[data-testid$="-ad"]',
                 '.promotedlink',
                 '.promoted-post',
                 '.ad-container',

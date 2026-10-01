@@ -31,8 +31,6 @@ import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.ChatBubbleOutline
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Card
@@ -71,7 +69,6 @@ import com.example.redx.theme.TextPrimary
 import com.example.redx.theme.TextSecondary
 import com.example.redx.theme.TextTertiary
 import com.example.redx.theme.UpvoteOrange
-import com.example.redx.util.UrlSafety
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
@@ -289,6 +286,7 @@ fun PostCard(
                         modifier = Modifier.fillMaxSize(),
                         autoPlay = true,
                         isMuted = true,
+                        isFeedItem = true,
                         onFullscreen = { onMediaClick?.invoke(post.videoUrl, post.title) }
                     )
 
@@ -582,45 +580,8 @@ fun PostCard(
                         )
                     }
 
-                    val downloadTarget = post.videoUrl ?: post.displayImageUrl
-                    if (!downloadTarget.isNullOrBlank()) {
-                        IconButton(
-                            onClick = {
-                                com.example.redx.util.MediaDownloadHelper.downloadMedia(context, downloadTarget, post.title)
-                            },
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Download,
-                                contentDescription = "Download Media",
-                                tint = TextSecondary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
-
-                    if (post.contentUrl.isNotBlank()) {
-                        IconButton(
-                            onClick = {
-                                try {
-                                    UrlSafety.httpUriOrNull(post.contentUrl)?.let { uri ->
-                                        context.startActivity(Intent(Intent.ACTION_VIEW, uri))
-                                    }
-                                } catch (e: Exception) {
-                                    // Ignore
-                                }
-                            },
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.OpenInBrowser,
-                                contentDescription = "Open Link",
-                                tint = TextSecondary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
-
+                    // Download and "open link" live in the quick-actions sheet (⋮). Six icons
+                    // plus the vote and comment pills overflowed the card on 360dp phones.
                     if (onLongClick != null) {
                         IconButton(
                             onClick = { onLongClick(post) },

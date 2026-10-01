@@ -203,12 +203,16 @@ fun GalleryPostCard(
                             text = "r/${post.subreddit}",
                             color = RedditOrange,
                             fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
                         )
+                        Spacer(modifier = Modifier.width(6.dp))
                         Row {
-                            Text(text = "▲ ${post.displayScore}", color = Color.White.copy(alpha = 0.8f), fontSize = 10.sp)
+                            Text(text = "▲ ${post.displayScore}", color = Color.White.copy(alpha = 0.8f), fontSize = 10.sp, maxLines = 1, softWrap = false)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text(text = "💬 ${post.displayComments}", color = Color.White.copy(alpha = 0.8f), fontSize = 10.sp)
+                            Text(text = "💬 ${post.displayComments}", color = Color.White.copy(alpha = 0.8f), fontSize = 10.sp, maxLines = 1, softWrap = false)
                         }
                     }
                 }

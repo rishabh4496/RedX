@@ -12,13 +12,37 @@ Built using **100% Jetpack Compose**, Material 3 design tokens, hardware-acceler
 
 ---
 
-### 📥 Direct APK Download (v2.3.0)
+### 📥 Direct APK Download (committed builds: v2.3.1)
+
+> **v2.4.0** (source in this repo) fixes the UI and data bugs listed below. The committed
+> APKs predate it — grab a fresh build from the **Android CI** run's `redx-release-apk` /
+> `redx-debug-apk` artifacts, or build locally with `./gradlew assembleRelease`.
+> CI signs the release APK when the `REDX_KEYSTORE_*` repository secrets are set.
+
 | Build | Description | Direct Download |
 |:---|:---|:---|
 | **Release APK** (Recommended) | R8-minified, resource-shrunk, release-signed — **3.3 MB**, down from 16.8 MB | [⬇️ Download `redx.apk`](https://github.com/rishabh4496/RedX/raw/main/redx.apk) |
 | **Release Binary** | Direct mirror of release binary | [⬇️ Download `redx-release.apk`](https://github.com/rishabh4496/RedX/raw/main/redx-release.apk) |
 | **Debug APK** | Developer build, installs alongside release as `com.example.redx.debug` | [⬇️ Download `redx-debug.apk`](https://github.com/rishabh4496/RedX/raw/main/redx-debug.apk) |
 | **GitHub Releases** | Release tags, changelogs, and APK assets | [🏷️ View Releases](https://github.com/rishabh4496/RedX/releases) |
+
+---
+
+## 🩹 What's New in v2.4.0 — UI & Data Bug-Fix Release
+
+Second audit pass focused on visible UI bugs and feed/data correctness. Details in
+**[AUDIT.md](AUDIT.md#v240-addendum)**.
+
+| Area | Change |
+|:---|:---|
+| **System UI** | Dark window theme (no white launch flash) and always-light status/nav icons, even on light-mode phones |
+| **Layout** | Phone toolbar no longer renders under the status bar; phones in landscape no longer get the cramped two-pane tablet layout |
+| **Scrolling** | "Scroll to top" and scroll reset now work in Gallery and tablet grid views; edge-swipe no longer swallows touches near screen edges |
+| **Feed** | Failed pagination no longer retries in an endless loop (now shows a retry button) and never appends unrelated search results |
+| **Data** | Every RSS post was tagged with an `r/sub` "flair" and a "submitted by…" body; unknown score/comment counts show `–` instead of `0` |
+| **Auth** | Session cookie was dropped from authenticated requests by OkHttp's cookie jar |
+| **Video** | New *Autoplay videos in feed* setting; RedGifs WebViews and players only start on tap when autoplay is off; double-tap seek no longer pauses |
+| **Misc** | Comments WebView no longer reloads while reading, ad-hiding script no longer deletes real page content, user profiles work signed-out, favourite subreddits keep their order |
 
 ---
 
@@ -71,7 +95,7 @@ Switch seamlessly between different viewing ergonomics:
 ### 📱 Tablet & Large Screen Optimization
 - **Dual-Pane Split View**: Browse the feed on the left (420dp) while reading post threads on the right.
 - **Magazine Grid Mode**: Responsive multi-column layout on wide screens.
-- **Xiaomi Pad 7 & Tablet Tested**: Custom layout adaptations, smooth touch targets, and orientation transition preservation.
+- **Tablet Tested**: Custom layout adaptations, smooth touch targets, and orientation transition preservation.
 
 ### 👆 Swipe Gestures with Spring Physics
 - **Swipe Right**: Upvote post with orange reveal and haptic feedback.

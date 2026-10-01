@@ -60,6 +60,17 @@ object RedditFeedService {
         .followRedirects(true)
         .build()
 
+    // OkHttp's bridge interceptor *replaces* an explicit Cookie header with whatever the jar
+    // holds. Requests that carry the user's session cookies therefore need a client without
+    // a jar, otherwise the session cookie is silently dropped after the first response that
+    // sets any cookie and authenticated feeds quietly fall back to anonymous RSS.
+    private val sessionClient = client.newBuilder()
+        .cookieJar(CookieJar.NO_COOKIES)
+        .build()
+
+    private fun clientFor(cookies: String): OkHttpClient =
+        if (cookies.isBlank()) client else sessionClient
+
     private const val BROWSER_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 
     private val imgPattern = Pattern.compile("<img\\s+[^>]*src=[\"']([^\"']+)[\"']", Pattern.CASE_INSENSITIVE)
@@ -158,6 +169,12 @@ object RedditFeedService {
             }
         }
 
+        // A failed "next page" must stay a failure: falling through to the search endpoint
+        // would append unrelated search results to the end of the subreddit feed.
+        if (after != null) {
+            return@withContext firstAttempt
+        }
+
         // If standard feed is empty or failed (typical for mature/NSFW subreddits that 302 to login),
         // use the search endpoint with include_over_18=on.
         // Note: Reddit search RSS accepts "relevance", "hot", "top", "new". For "rising", use "new".
@@ -227,6 +244,22 @@ object RedditFeedService {
         executeRequest(searchUrl, cleanSub ?: "all", cookieHeader, includeMature)
     }
 
+    /**
+     * Anonymous profile viewing: Reddit rejects unauthenticated `.json` calls, but the public
+     * Atom feed of a user's submissions still works.
+     */
+    suspend fun fetchUserSubmittedFeed(username: String): Result<List<RedditPost>> =
+        withContext(Dispatchers.IO) {
+            val cleanName = RedditInputValidator.normalizeUsername(username)
+                ?: return@withContext Result.failure(IllegalArgumentException("Invalid Reddit username"))
+            executeRequest(
+                "https://www.reddit.com/user/$cleanName/submitted.rss?limit=50",
+                fallbackSubreddit = "reddit",
+                cookieHeader = null,
+                includeMature = false
+            )
+        }
+
     private fun executeJsonRequest(
         url: String,
         fallbackSubreddit: String,
@@ -243,7 +276,7 @@ object RedditFeedService {
             val cookies = buildCookieHeader(cookieHeader, includeMature)
             if (cookies.isNotBlank()) requestBuilder.header("Cookie", cookies)
 
-            client.newCall(requestBuilder.build()).execute().use { response ->
+            clientFor(cookies).newCall(requestBuilder.build()).execute().use { response ->
                 if (!response.isSuccessful) {
                     if (response.code == 429) {
                         val resetSec = response.header("x-ratelimit-reset")?.toIntOrNull()
@@ -281,7 +314,7 @@ object RedditFeedService {
             val cookies = buildCookieHeader(cookieHeader, includeMature)
             if (cookies.isNotBlank()) requestBuilder.header("Cookie", cookies)
 
-            client.newCall(requestBuilder.build()).execute().use { response ->
+            clientFor(cookies).newCall(requestBuilder.build()).execute().use { response ->
                 if (!response.isSuccessful) {
                     if (response.code == 429) {
                         val resetSec = response.header("x-ratelimit-reset")?.toIntOrNull()
@@ -692,7 +725,7 @@ object RedditFeedService {
                                 if (term.isNotBlank()) {
                                     subreddit = term
                                 }
-                                if (label.isNotBlank() && label != term) {
+                                if (!AtomContent.isSubredditLabel(term, label)) {
                                     flair = label
                                 }
                             }
@@ -721,7 +754,7 @@ object RedditFeedService {
                 XmlPullParser.END_TAG -> {
                     if (tagName == "entry" && inEntry) {
                         inEntry = false
-                        val decodedContent = Html.fromHtml(contentHtml, Html.FROM_HTML_MODE_LEGACY).toString()
+                        val selfText = AtomContent.extractSelfText(contentHtml)
 
                         // Extract external link [link]
                         var contentUrl = permalink
@@ -810,13 +843,14 @@ object RedditFeedService {
                             posts.add(
                                 RedditPost(
                                     id = cleanId,
-                                    title = Html.fromHtml(title, Html.FROM_HTML_MODE_LEGACY).toString().trim(),
+                                    title = AtomContent.decodeEntities(title).trim(),
                                     author = if (author.isNotBlank()) author else "reddit_user",
                                     subreddit = subreddit.ifBlank { "reddit" },
                                     // Atom feeds do not expose these values. JSON is the primary
                                     // path and supplies real metrics; never invent numbers here.
                                     score = 0,
                                     numComments = 0,
+                                    hasMetrics = false,
                                     publishedTime = relativeTime,
                                     timestampMs = parsedTime,
                                     permalink = permalink,
@@ -826,7 +860,7 @@ object RedditFeedService {
                                     previewImageUrl = previewImage,
                                     videoUrl = videoUrl,
                                     isVideo = isVideo,
-                                    selfTextHtml = decodedContent.trim().takeIf { it.isNotBlank() },
+                                    selfTextHtml = selfText,
                                     flair = flair,
                                     isNsfw = isNsfw
                                 )

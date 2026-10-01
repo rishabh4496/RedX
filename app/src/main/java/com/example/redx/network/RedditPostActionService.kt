@@ -119,10 +119,12 @@ object RedditPostActionService {
             client.newCall(requestBuilder.build()).execute().use { response ->
                 val body = response.body.string()
                 if (!response.isSuccessful) {
+                    cachedModhash = null
                     return Result.failure(IllegalStateException("HTTP ${response.code} from Reddit"))
                 }
                 val errors = parseErrors(body)
                 if (errors.isNotEmpty()) {
+                    cachedModhash = null
                     Result.failure(IllegalStateException(errors.joinToString("; ")))
                 } else if (body.isNotBlank() && !body.trimStart().startsWith("{")) {
                     Result.failure(IllegalStateException("Reddit returned an unexpected action response"))
@@ -135,7 +137,12 @@ object RedditPostActionService {
         }
     }
 
+    // The modhash is stable for a session; fetching it before *every* vote doubled the
+    // request count and made voting noticeably laggy.
+    @Volatile private var cachedModhash: Pair<String, String>? = null
+
     private fun fetchModhash(cookieHeader: String): Result<String> {
+        cachedModhash?.takeIf { it.first == cookieHeader }?.let { return Result.success(it.second) }
         val endpoints = listOf(
             "https://old.reddit.com/api/me.json?raw_json=1",
             "https://www.reddit.com/api/me.json?raw_json=1"
@@ -157,7 +164,10 @@ object RedditPostActionService {
                             .optJSONObject("data")
                             ?.optString("modhash")
                             .orEmpty()
-                        if (modhash.isNotBlank()) return Result.success(modhash)
+                        if (modhash.isNotBlank()) {
+                            cachedModhash = cookieHeader to modhash
+                            return Result.success(modhash)
+                        }
                     }
                 }
             } catch (_: Exception) {

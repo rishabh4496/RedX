@@ -64,6 +64,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.net.toUri
+import androidx.compose.runtime.compositionLocalOf
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
 import androidx.core.text.htmlEncode
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -82,6 +85,9 @@ import com.example.redx.theme.RedditOrange
 import com.example.redx.util.UrlSafety
 import com.example.redx.util.AdBlocker
 
+/** Whether feed videos may start by themselves (user setting). Detail/lightbox always play. */
+val LocalAutoplayVideos = compositionLocalOf { true }
+
 private fun formatPlayerTime(ms: Long): String {
     val totalSeconds = (ms / 1000).coerceAtLeast(0)
     val minutes = totalSeconds / 60
@@ -98,6 +104,7 @@ fun VideoPlayerView(
     thumbnailUrl: String? = null,
     autoPlay: Boolean = true,
     isMuted: Boolean = true,
+    isFeedItem: Boolean = false,
     onFullscreen: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
@@ -126,6 +133,20 @@ fun VideoPlayerView(
     val isRedGifsEmbed = safeVideoUrl.contains("redgifs.com/watch/", ignoreCase = true) ||
             safeVideoUrl.contains("redgifs.com/ifr/", ignoreCase = true)
     val isDirectVideo = !isRedGifsEmbed
+
+    // Feed items only spin up a player (or, worse, a JavaScript WebView for RedGifs embeds)
+    // when autoplay is on and the item is a real video stream, or once the user taps play.
+    // Previously every video card in the feed created a player immediately.
+    val feedAutoplayAllowed = LocalAutoplayVideos.current && isDirectVideo
+    var userStartedPlayback by remember(safeVideoUrl) { mutableStateOf(false) }
+    if (isFeedItem && !feedAutoplayAllowed && !userStartedPlayback) {
+        VideoPoster(
+            thumbnailUrl = thumbnailUrl,
+            modifier = modifier,
+            onPlay = { userStartedPlayback = true }
+        )
+        return
+    }
 
     val resolvedUrl = remember(safeVideoUrl) {
         when {
@@ -331,6 +352,9 @@ fun VideoPlayerView(
                     .pointerInput(exoPlayer) {
                         var lastTapTime = 0L
                         var lastTapPos = androidx.compose.ui.geometry.Offset.Zero
+                        // The first tap of a double tap already toggled play/pause; remember
+                        // what it was so a seek double-tap doesn't leave the video paused.
+                        var wasPlayingBeforeFirstTap = false
 
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false)
@@ -371,20 +395,22 @@ fun VideoPlayerView(
                                         if (downPos.x < width * 0.4f) {
                                             val newPos = maxOf(0L, exoPlayer.currentPosition - 10000L)
                                             exoPlayer.seekTo(newPos)
+                                            if (wasPlayingBeforeFirstTap) exoPlayer.play() else exoPlayer.pause()
                                             seekFeedbackText = "-10s"
                                             seekFeedbackSide = -1
                                         } else if (downPos.x > width * 0.6f) {
                                             val newPos = minOf(dur, exoPlayer.currentPosition + 10000L)
                                             exoPlayer.seekTo(newPos)
+                                            if (wasPlayingBeforeFirstTap) exoPlayer.play() else exoPlayer.pause()
                                             seekFeedbackText = "+10s"
                                             seekFeedbackSide = 1
-                                        } else {
-                                            if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
                                         }
+                                        // Centre double-tap: the first tap already toggled playback.
                                         lastTapTime = 0L
                                     } else {
                                         lastTapTime = downTime
                                         lastTapPos = downPos
+                                        wasPlayingBeforeFirstTap = exoPlayer.isPlaying
                                         if (exoPlayer.isPlaying) {
                                             exoPlayer.pause()
                                         } else {
@@ -736,6 +762,45 @@ fun VideoPlayerView(
                     webView.stopLoading()
                     webView.destroy()
                 }
+            )
+        }
+    }
+}
+
+@Composable
+private fun VideoPoster(
+    thumbnailUrl: String?,
+    modifier: Modifier,
+    onPlay: () -> Unit
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color.Black)
+            .clickable(onClick = onPlay),
+        contentAlignment = Alignment.Center
+    ) {
+        if (!thumbnailUrl.isNullOrBlank()) {
+            AsyncImage(
+                model = thumbnailUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+        Box(
+            modifier = Modifier
+                .size(54.dp)
+                .clip(CircleShape)
+                .background(Color.Black.copy(alpha = 0.7f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.PlayArrow,
+                contentDescription = "Play video",
+                tint = RedditOrange,
+                modifier = Modifier.size(36.dp)
             )
         }
     }

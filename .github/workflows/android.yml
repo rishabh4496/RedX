@@ -37,14 +37,39 @@ jobs:
       - name: Run unit tests and lint
         run: ./gradlew testDebugUnitTest lintDebug --stacktrace
 
-      - name: Assemble minified release APK
-        run: ./gradlew assembleRelease --stacktrace
+      - name: Restore release keystore (optional)
+        # Add REDX_KEYSTORE_BASE64, REDX_KEYSTORE_PASSWORD, REDX_KEY_ALIAS and
+        # REDX_KEY_PASSWORD as repository secrets to get a signed, installable release APK
+        # from CI. Without them (forks, Dependabot) the release APK is left unsigned.
+        env:
+          REDX_KEYSTORE_BASE64: ${{ secrets.REDX_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$REDX_KEYSTORE_BASE64" ]; then
+            echo "$REDX_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/redx-release.jks"
+            echo "REDX_KEYSTORE_FILE=$RUNNER_TEMP/redx-release.jks" >> "$GITHUB_ENV"
+          else
+            echo "No release keystore secret configured; release APK will be unsigned."
+          fi
+
+      - name: Assemble minified release and debug APKs
+        env:
+          REDX_KEYSTORE_PASSWORD: ${{ secrets.REDX_KEYSTORE_PASSWORD }}
+          REDX_KEY_ALIAS: ${{ secrets.REDX_KEY_ALIAS }}
+          REDX_KEY_PASSWORD: ${{ secrets.REDX_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease assembleDebug --stacktrace
 
       - name: Upload release APK
         uses: actions/upload-artifact@v7
         with:
           name: redx-release-apk
           path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: redx-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
       - name: Upload lint report

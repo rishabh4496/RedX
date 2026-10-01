@@ -33,6 +33,12 @@ object RedditUserService {
         val afterParam = after?.trim()?.takeIf { it.isNotBlank() }
             ?.let { "&after=${java.net.URLEncoder.encode(it, "UTF-8")}" }
             .orEmpty()
+        // Reddit rejects anonymous .json requests (403), which left the profile viewer
+        // permanently empty for signed-out users. Use the public Atom feed instead.
+        val hasSession = cookieHeader?.contains("reddit_session", ignoreCase = true) == true
+        if (!hasSession && after == null) {
+            return@withContext RedditFeedService.fetchUserSubmittedFeed(cleanName)
+        }
         val url = "https://www.reddit.com/user/$cleanName/submitted.json?limit=25&raw_json=1$afterParam"
         try {
             val requestBuilder = Request.Builder()
@@ -46,6 +52,7 @@ object RedditUserService {
             }
             client.newCall(requestBuilder.build()).execute().use { response ->
                 if (!response.isSuccessful) {
+                    if (after == null) return@withContext RedditFeedService.fetchUserSubmittedFeed(cleanName)
                     return@withContext Result.failure(Exception("HTTP ${response.code}"))
                 }
                 val body = response.body.string()

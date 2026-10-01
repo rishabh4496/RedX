@@ -43,6 +43,7 @@ data class RedXUiState(
     val isLoading: Boolean = false,
     val isLoadingMore: Boolean = false,
     val canLoadMore: Boolean = true,
+    val loadMoreFailed: Boolean = false,
     val errorMessage: String? = null,
     val emptyStateMessage: String? = null,
     val selectedPost: RedditPost? = null,
@@ -63,6 +64,7 @@ data class RedXUiState(
     val lightboxGalleryUrls: List<String> = emptyList(),
     val quickActionsPost: RedditPost? = null,
     val hideReadPosts: Boolean = false,
+    val autoplayVideos: Boolean = true,
     val activeFlairFilter: String? = null,
     val filteredPostCount: Int = 0,
     val isSearchActive: Boolean = false,
@@ -148,7 +150,8 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
             fontScale = prefs.getString("key_font_scale", null)?.let { name ->
                 try { FontScale.valueOf(name) } catch (e: Exception) { FontScale.NORMAL }
             } ?: FontScale.NORMAL,
-            hideReadPosts = prefs.getBoolean("key_hide_read_posts", false)
+            hideReadPosts = prefs.getBoolean("key_hide_read_posts", false),
+            autoplayVideos = prefs.getBoolean("key_autoplay_videos", true)
         )
     )
     val uiState: StateFlow<RedXUiState> = _uiState.asStateFlow()
@@ -187,6 +190,19 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
             accountManager.refreshAuthenticatedAccount()
         }
         loadFeed(subreddit = initialSub, sort = FeedSort.HOT)
+    }
+
+    /**
+     * A composite `a+b` target is a multi-feed; anything else is a single feed. Keeping the
+     * flag derived from the target stops a stale multi-feed banner (and disabled edge swipe)
+     * from lingering after the user taps a regular subreddit chip.
+     */
+    private fun RedXUiState.syncMultiFeed(targetSub: String): RedXUiState {
+        val isMulti = targetSub.contains("+")
+        return copy(
+            multiSubredditMode = isMulti,
+            multiSubreddits = if (isMulti) multiSubreddits else emptyList()
+        )
     }
 
     private fun filterAndMapPosts(rawList: List<RedditPost>): Pair<List<RedditPost>, Int> {
@@ -326,8 +342,9 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
                 posts = markedPosts,
                 filteredPostCount = filterCount,
                 isLoadingMore = false,
-                canLoadMore = true
-            )
+                canLoadMore = true,
+                loadMoreFailed = false
+            ).syncMultiFeed(targetSub)
             return
         }
 
@@ -346,8 +363,9 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
             posts = if (sameSubAndSort) _uiState.value.posts else emptyList(),
             filteredPostCount = 0,
             isLoadingMore = false,
-            canLoadMore = true
-        )
+            canLoadMore = true,
+            loadMoreFailed = false
+        ).syncMultiFeed(targetSub)
         if (!sameSubAndSort) {
             rawFetchedPosts = emptyList()
         }
@@ -434,7 +452,7 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
         val targetSub = _uiState.value.activeSubreddit
         val targetSort = _uiState.value.activeSort
 
-        _uiState.value = _uiState.value.copy(isLoadingMore = true)
+        _uiState.value = _uiState.value.copy(isLoadingMore = true, loadMoreFailed = false)
 
         viewModelScope.launch {
             val includeMature = accountManager.userProfile.value.showMatureContent
@@ -484,10 +502,13 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
                         "subreddit" to targetSub,
                         "message" to err.localizedMessage
                     )
+                    // Flag the failure so the auto-loader stops; otherwise it re-fires the
+                    // instant isLoadingMore flips back to false and hammers Reddit forever.
                     _uiState.value = _uiState.value.copy(
                         isLoadingMore = false,
-                        errorMessage = err.localizedMessage ?: "Couldn't load more posts"
+                        loadMoreFailed = true
                     )
+                    showTransientMessage(err.localizedMessage ?: "Couldn't load more posts")
                 }
             )
         }
@@ -532,6 +553,7 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
             posts = emptyList(),
             filteredPostCount = 0,
             isLoadingMore = false,
+            loadMoreFailed = false,
             emptyStateMessage = null
         )
         rawFetchedPosts = emptyList()
@@ -629,37 +651,29 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
             showTransientMessage("Sign in to vote on Reddit")
             return
         }
-        val currentPosts = _uiState.value.posts.toMutableList()
-        val index = currentPosts.indexOfFirst { it.id == post.id }
-        if (index != -1) {
-            val currentPost = currentPosts[index]
-            val oldVote = currentPost.userVote
-            val normalizedVote = newVote.coerceIn(-1, 1)
-            val scoreDelta = normalizedVote - oldVote
-            val updatedPost = currentPost.copy(
-                userVote = normalizedVote,
-                score = currentPost.score + scoreDelta
-            )
-            currentPosts[index] = updatedPost
-            rawFetchedPosts = rawFetchedPosts.map { if (it.id == post.id) updatedPost else it }
-            _uiState.value = _uiState.value.copy(
-                posts = currentPosts,
-                selectedPost = if (_uiState.value.selectedPost?.id == post.id) updatedPost else _uiState.value.selectedPost
-            )
+        // Posts opened from outside the feed (saved list, user profile) are not in `posts`;
+        // they must still be votable, so fall back to the post that was passed in.
+        val currentPost = _uiState.value.posts.firstOrNull { it.id == post.id } ?: post
+        val normalizedVote = newVote.coerceIn(-1, 1)
+        val scoreDelta = normalizedVote - currentPost.userVote
+        val updatedPost = currentPost.copy(
+            userVote = normalizedVote,
+            score = currentPost.score + scoreDelta
+        )
+        replacePost(updatedPost)
 
-            val cookieHeader = accountManager.getCookieHeader()
-            val actionId = ++postActionGeneration
-            latestVoteRequest[post.id] = actionId
-            viewModelScope.launch {
-                RedditPostActionService.vote(cookieHeader, updatedPost.id, normalizedVote)
-                    .onSuccess { if (latestVoteRequest[post.id] == actionId) latestVoteRequest.remove(post.id) }
-                    .onFailure {
-                        if (latestVoteRequest[post.id] == actionId) {
-                            replacePost(currentPost)
-                            showTransientMessage("Reddit rejected the vote; your feed was restored")
-                        }
+        val cookieHeader = accountManager.getCookieHeader()
+        val actionId = ++postActionGeneration
+        latestVoteRequest[post.id] = actionId
+        viewModelScope.launch {
+            RedditPostActionService.vote(cookieHeader, updatedPost.id, normalizedVote)
+                .onSuccess { if (latestVoteRequest[post.id] == actionId) latestVoteRequest.remove(post.id) }
+                .onFailure {
+                    if (latestVoteRequest[post.id] == actionId) {
+                        replacePost(currentPost)
+                        showTransientMessage("Reddit rejected the vote; your feed was restored")
                     }
-            }
+                }
         }
     }
 
@@ -731,6 +745,11 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
             posts = currentPosts,
             selectedPost = updatedSelected
         )
+    }
+
+    fun setAutoplayVideos(enabled: Boolean) {
+        prefs.edit { putBoolean("key_autoplay_videos", enabled) }
+        _uiState.value = _uiState.value.copy(autoplayVideos = enabled)
     }
 
     fun sweepReadPosts() {
@@ -1000,6 +1019,9 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
                 userProfilePosts = result.getOrElse { emptyList() },
                 isUserProfileLoading = false
             )
+            result.exceptionOrNull()?.let {
+                showTransientMessage("Couldn't load u/$cleanUsername's posts")
+            }
         }
     }
 

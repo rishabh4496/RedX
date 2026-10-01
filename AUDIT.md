@@ -198,3 +198,58 @@ The signed release APK was installed and exercised on an Android 14 emulator:
 - The release APK committed to the repository is signed with a local release keystore;
   the keystore is intentionally ignored and is not published. Future updates must use
   the same signing key, or Android will treat them as a different app.
+
+
+---
+
+## v2.4.0 addendum
+
+A second pass over the v2.3.1 tree, concentrating on UI defects and data-layer bugs.
+This environment had no Android SDK access, so every change below was verified by code
+review plus the CI workflow (`./gradlew testDebugUnitTest lintDebug assembleRelease`)
+rather than on a device; see the commit's CI run for results.
+
+### UI / layout
+| # | Bug | Fix |
+|---|-----|-----|
+| U1 | Window theme inherited `Material.Light`: white flash at launch, and `enableEdgeToEdge()` picked dark status/nav icons on light-mode phones (invisible on the dark UI) | Dark window theme + explicit `SystemBarStyle.dark` |
+| U2 | Phone header did not consume status-bar insets, so it drew under the status bar | `windowInsetsPadding(statusBars)` on the header column |
+| U3 | Phones in landscape (>760dp wide, ~400dp tall) got the two-pane tablet layout | Tablet mode now also requires height >= 480dp |
+| U4 | Scroll-to-top, scroll reset on feed change and the FAB only knew the list state; Gallery and tablet grid views never scrolled | Grid states hoisted; all three reset / the active one animates to top |
+| U5 | `AnimatedContent` kept two lazy layouts alive on one scroll state when switching styles | Plain branch |
+| U6 | Edge-swipe overlay rails sat above the feed as siblings and could swallow touches for ~72dp on each side | Gesture observed on the feed container (Initial pass, never consumes) |
+| U7 | Hard-coded "Xiaomi Pad 7" badge / "Command Center" copy shown on every tablet | Removed |
+| U8 | Card action bar (vote + comments + 6 icons) overflowed on 360dp phones | Download / open-link moved to the existing quick-actions sheet |
+| U9 | Gallery tile stats clipped on narrow tiles | Ellipsis + non-wrapping stats |
+| U10 | Relay card accent bar never rendered (`fillMaxSize` in an unbounded Row) | Drawn with `drawBehind` |
+| U11 | Lightbox pan limits were fixed pixel values | Derived from the viewport |
+| U12 | Double-tap seek on video left it paused (first tap had toggled playback) | Playback state restored |
+| U13 | Comments WebView reloaded the original URL on every recomposition | `update` block removed |
+
+### Data / network
+| # | Bug | Fix |
+|---|-----|-----|
+| D1 | Pagination failure re-triggered the auto-loader immediately and forever | `loadMoreFailed` state + retry button |
+| D2 | A failed next-page fetch fell through to the search endpoint and appended unrelated posts | No search fallback while paging |
+| D3 | Atom `<category label="r/sub">` was surfaced as every post's flair | Subreddit labels ignored |
+| D4 | Atom `<content>` (thumbnail + "submitted by /u/x [link] [comments]") was used as post body, making every post a "text" post and polluting keyword filters | Only the `SC_OFF/SC_ON` markdown block is used |
+| D5 | RSS posts showed `0` score/comments | `hasMetrics=false` renders `–` |
+| D6 | OkHttp's bridge interceptor replaces an explicit `Cookie` header with the jar contents, dropping `reddit_session` | Session requests use a jar-less client |
+| D7 | Titles containing `<...>` lost text (HTML-stripped) | Entity decode only |
+| D8 | Votes on posts not in the current list (saved list, profile) were silently ignored | Falls back to the passed post |
+| D9 | A modhash was fetched before every vote/save | Cached per session cookie |
+| D10 | User profiles always failed signed-out (anonymous `.json` is 403) | RSS fallback and visible error |
+| D11 | Multi-feed banner stayed active after selecting a normal subreddit | Derived from the target |
+| D12 | Favourite subreddits stored as an unordered set | Ordered JSON (legacy set migrated) |
+| D13 | One corrupt saved post discarded all following saved posts | Per-item parsing |
+| D14 | Ad-hiding script removed every `[data-testid*="ad"]` element (header, thread, ...) | Anchored selectors |
+| D15 | Every feed video created an ExoPlayer / JS WebView on composition | `Autoplay videos in feed` setting; embeds are tap-to-play |
+
+### Added tests
+`AtomContentTest`, `RedditPostMetricsTest`, and an `AdBlockerTest` regression case.
+
+### Release artifacts
+The committed `redx*.apk` files are the previous v2.3.1 builds. They can only be
+re-signed with the maintainer's keystore, so they are produced by CI (set the
+`REDX_KEYSTORE_BASE64`, `REDX_KEYSTORE_PASSWORD`, `REDX_KEY_ALIAS`, `REDX_KEY_PASSWORD`
+secrets) or locally via `keystore.properties`.

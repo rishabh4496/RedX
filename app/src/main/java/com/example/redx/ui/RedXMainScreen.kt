@@ -1,14 +1,11 @@
 package com.example.redx.ui
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
@@ -34,6 +31,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -45,6 +45,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
@@ -157,7 +158,7 @@ import com.example.redx.ui.components.StreamlinePostCard
 import com.example.redx.ui.components.TextOnlyPostCard
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import com.example.redx.ui.components.CrosspostDialog
-import com.example.redx.ui.components.EdgeSubredditSwipeOverlay
+import com.example.redx.ui.components.edgeSubredditSwipe
 import com.example.redx.ui.components.FeedContextBanner
 import com.example.redx.ui.components.MultiSubredditPickerDialog
 import com.example.redx.ui.components.ReadLaterSheet
@@ -188,11 +189,20 @@ fun RedXMainScreen(
     val displayedSubreddits by viewModel.displayedSubreddits.collectAsState()
 
     val listState = rememberLazyListState()
+    // Grid-based feeds (Gallery view and the tablet magazine grid) own their own scroll
+    // state. These are hoisted so "scroll to top" and "reset on feed change" reach whichever
+    // layout is on screen; they previously only ever touched the list state.
+    val galleryGridState = rememberLazyGridState()
+    val tabletGridState = rememberLazyGridState()
     val scope = rememberCoroutineScope()
     var tabletLayoutMode by rememberSaveable { mutableStateOf(TabletLayoutMode.SPLIT) }
 
-    val showScrollToTop by remember {
-        derivedStateOf { listState.firstVisibleItemIndex > 4 }
+    fun resetFeedScroll() {
+        scope.launch {
+            listState.scrollToItem(0)
+            galleryGridState.scrollToItem(0)
+            tabletGridState.scrollToItem(0)
+        }
     }
 
     val infiniteTransition = rememberInfiniteTransition(label = "refreshRotation")
@@ -208,7 +218,29 @@ fun RedXMainScreen(
     val refreshRotation = if (uiState.isLoading) rawRotation else 0f
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val isTabletLandscape = maxWidth >= 760.dp
+        // Require real tablet height as well as width: a phone in landscape is often wider
+        // than 760dp but only ~400dp tall, where the two-pane layout leaves no room to scroll.
+        val isTabletLandscape = maxWidth >= 760.dp && maxHeight >= 480.dp
+        val isMagazineGrid = isTabletLandscape && tabletLayoutMode == TabletLayoutMode.MAGAZINE
+        val showScrollToTop by remember(uiState.viewMode, isMagazineGrid) {
+            derivedStateOf {
+                val index = when {
+                    uiState.viewMode == FeedViewMode.GALLERY -> galleryGridState.firstVisibleItemIndex
+                    isMagazineGrid -> tabletGridState.firstVisibleItemIndex
+                    else -> listState.firstVisibleItemIndex
+                }
+                index > 4
+            }
+        }
+        val scrollActiveFeedToTop: () -> Unit = {
+            scope.launch {
+                when {
+                    uiState.viewMode == FeedViewMode.GALLERY -> galleryGridState.animateScrollToItem(0)
+                    isMagazineGrid -> tabletGridState.animateScrollToItem(0)
+                    else -> listState.animateScrollToItem(0)
+                }
+            }
+        }
         val showDetailModal = uiState.selectedPost != null && (!isTabletLandscape || tabletLayoutMode == TabletLayoutMode.MAGAZINE)
 
         val isLightboxOpen = uiState.lightboxMediaUrl != null || uiState.lightboxVideoUrl != null
@@ -263,21 +295,6 @@ fun RedXMainScreen(
                                         fontSize = 24.sp,
                                         fontWeight = FontWeight.ExtraBold
                                     )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .background(AmoledSurfaceElevated)
-                                            .border(1.dp, RedditOrange.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
-                                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                                    ) {
-                                        Text(
-                                            text = "XIAOMI PAD 7",
-                                            color = RedditOrange,
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Box(
                                         modifier = Modifier
@@ -610,7 +627,7 @@ fun RedXMainScreen(
                                 subreddits = displayedSubreddits,
                                 onSubredditSelected = { sub ->
                                     viewModel.loadFeed(subreddit = sub)
-                                    scope.launch { listState.scrollToItem(0) }
+                                    resetFeedScroll()
                                 },
                                 onOpenCustomPicker = { viewModel.setCustomSubredditDialogOpen(true) },
                                 onOpenMultiPicker = { viewModel.setMultiSubPickerOpen(true) }
@@ -622,7 +639,7 @@ fun RedXMainScreen(
                             activeSort = uiState.activeSort,
                             onSortSelected = { sort ->
                                 viewModel.loadFeed(sort = sort)
-                                scope.launch { listState.scrollToItem(0) }
+                                resetFeedScroll()
                             }
                         )
 
@@ -695,7 +712,7 @@ fun RedXMainScreen(
                         exit = fadeOut()
                     ) {
                         FloatingActionButton(
-                            onClick = { scope.launch { listState.animateScrollToItem(0) } },
+                            onClick = scrollActiveFeedToTop,
                             containerColor = RedditOrange,
                             contentColor = Color.White,
                             shape = CircleShape,
@@ -728,6 +745,8 @@ fun RedXMainScreen(
                                 PostFeedContent(
                                     uiState = uiState,
                                     listState = listState,
+                                    galleryGridState = galleryGridState,
+                                    tabletGridState = tabletGridState,
                                     selectedPostId = uiState.selectedPost?.id,
                                     isTabletMagazine = false,
                                     onPostClick = { post -> viewModel.selectPost(post) },
@@ -735,18 +754,18 @@ fun RedXMainScreen(
                                     onToggleSave = { post -> viewModel.toggleSave(post) },
                                     onSubredditClick = { sub ->
                                         viewModel.loadFeed(subreddit = sub)
-                                        scope.launch { listState.scrollToItem(0) }
+                                        resetFeedScroll()
                                     },
                                     onSwitchSubreddit = { direction ->
                                         if (viewModel.switchSubreddit(direction)) {
-                                            scope.launch { listState.scrollToItem(0) }
+                                            resetFeedScroll()
                                         }
                                     },
                                     onLongClickPost = { post -> viewModel.openQuickActions(post) },
                                     onOpenLightbox = { url, title -> viewModel.openLightbox(url, title) },
                                     onFlairClick = { flair -> viewModel.setFlairFilter(flair) },
                                     onLoadMore = { viewModel.loadMorePosts() },
-                                    onRefresh = { viewModel.loadFeed() },
+                                    onRefresh = { viewModel.loadFeed(forceRefresh = true) },
                                     onAuthorClick = { author -> viewModel.openUserProfile(author) }
                                 )
                             }
@@ -789,7 +808,7 @@ fun RedXMainScreen(
                                         },
                                         onSubredditClick = { sub ->
                                             viewModel.loadFeed(subreddit = sub)
-                                            scope.launch { listState.scrollToItem(0) }
+                                            resetFeedScroll()
                                         }
                                     )
                                 }
@@ -800,6 +819,8 @@ fun RedXMainScreen(
                         PostFeedContent(
                             uiState = uiState,
                             listState = listState,
+                            galleryGridState = galleryGridState,
+                            tabletGridState = tabletGridState,
                             selectedPostId = uiState.selectedPost?.id,
                             isTabletMagazine = true,
                             onPostClick = { post -> viewModel.selectPost(post) },
@@ -807,18 +828,18 @@ fun RedXMainScreen(
                             onToggleSave = { post -> viewModel.toggleSave(post) },
                             onSubredditClick = { sub ->
                                 viewModel.loadFeed(subreddit = sub)
-                                scope.launch { listState.scrollToItem(0) }
+                                resetFeedScroll()
                             },
                             onSwitchSubreddit = { direction ->
                                 if (viewModel.switchSubreddit(direction)) {
-                                    scope.launch { listState.scrollToItem(0) }
+                                    resetFeedScroll()
                                 }
                             },
                             onLongClickPost = { post -> viewModel.openQuickActions(post) },
                             onOpenLightbox = { url, title -> viewModel.openLightbox(url, title) },
                             onFlairClick = { flair -> viewModel.setFlairFilter(flair) },
                             onLoadMore = { viewModel.loadMorePosts() },
-                            onRefresh = { viewModel.loadFeed() },
+                            onRefresh = { viewModel.loadFeed(forceRefresh = true) },
                             onAuthorClick = { author -> viewModel.openUserProfile(author) }
                         )
                     }
@@ -833,16 +854,18 @@ fun RedXMainScreen(
                 userProfile = userProfile,
                 displayedSubreddits = displayedSubreddits,
                 listState = listState,
+                galleryGridState = galleryGridState,
+                tabletGridState = tabletGridState,
                 onPostClick = { post -> viewModel.selectPost(post) },
                 onVote = { post, vote -> viewModel.vote(post, vote) },
                 onToggleSave = { post -> viewModel.toggleSave(post) },
                 onSubredditClick = { sub ->
                     viewModel.loadFeed(subreddit = sub)
-                    scope.launch { listState.scrollToItem(0) }
+                    resetFeedScroll()
                 },
                 onSwitchSubreddit = { direction ->
                     if (viewModel.switchSubreddit(direction)) {
-                        scope.launch { listState.scrollToItem(0) }
+                        resetFeedScroll()
                     }
                 },
                 onOpenSearch = { viewModel.setSearchDialogOpen(true) },
@@ -860,7 +883,7 @@ fun RedXMainScreen(
                 onCycleViewMode = { viewModel.setViewStylePickerOpen(true) },
                 onSelectSort = { sort ->
                     viewModel.loadFeed(sort = sort)
-                    scope.launch { listState.scrollToItem(0) }
+                    resetFeedScroll()
                 },
                 onClearSearch = { viewModel.clearSearch() },
                 onRevertFeed = { sub, sort -> viewModel.clearSearch(sub, sort) },
@@ -871,7 +894,7 @@ fun RedXMainScreen(
                 onClearFlairFilter = { viewModel.clearFlairFilter() },
                 onLoadMore = { viewModel.loadMorePosts() },
                 showScrollToTop = showScrollToTop,
-                onScrollToTop = { scope.launch { listState.animateScrollToItem(0) } },
+                onScrollToTop = scrollActiveFeedToTop,
                 selectedPostId = null
             )
         }
@@ -939,6 +962,8 @@ fun RedXMainScreen(
             currentFontScale = uiState.fontScale,
             hideReadPosts = uiState.hideReadPosts,
             showMatureContent = userProfile.showMatureContent,
+            autoplayVideos = uiState.autoplayVideos,
+            onToggleAutoplay = { viewModel.setAutoplayVideos(it) },
             onToggleHideRead = { viewModel.setHideReadPosts(it) },
             onToggleMature = { viewModel.toggleMatureContent(it) },
             onOpenAppearance = {
@@ -1006,7 +1031,7 @@ fun RedXMainScreen(
             onDismiss = { viewModel.setSearchDialogOpen(false) },
             onExecuteSearch = { query, inSub, mature, sort ->
                 viewModel.executeSearch(query, inSub, mature, sort)
-                scope.launch { listState.scrollToItem(0) }
+                resetFeedScroll()
             }
         )
     }
@@ -1026,11 +1051,11 @@ fun RedXMainScreen(
             onLogout = { viewModel.logout() },
             onSelectHomeFeed = {
                 viewModel.loadFeed(subreddit = "home")
-                scope.launch { listState.scrollToItem(0) }
+                resetFeedScroll()
             },
             onSelectSubreddit = { sub ->
                 viewModel.loadFeed(subreddit = sub)
-                scope.launch { listState.scrollToItem(0) }
+                resetFeedScroll()
             }
         )
     }
@@ -1043,7 +1068,7 @@ fun RedXMainScreen(
             onToggleFavorite = { viewModel.toggleFavoriteSubreddit(it) },
             onSubredditSelected = { sub ->
                 viewModel.loadFeed(subreddit = sub)
-                scope.launch { listState.scrollToItem(0) }
+                resetFeedScroll()
             }
         )
     }
@@ -1053,7 +1078,7 @@ fun RedXMainScreen(
             onDismiss = { viewModel.setCommunityExplorerOpen(false) },
             onSubredditSelected = { sub ->
                 viewModel.loadFeed(subreddit = sub)
-                scope.launch { listState.scrollToItem(0) }
+                resetFeedScroll()
             },
             recentSubreddits = recentSubreddits,
             favoriteSubreddits = favoriteSubreddits,
@@ -1142,7 +1167,7 @@ private fun TabletHubWelcomeView(
         Spacer(modifier = Modifier.height(18.dp))
 
         Text(
-            text = "Xiaomi Pad 7 Command Center",
+            text = "Pick a story to read",
             color = TextPrimary,
             fontSize = 22.sp,
             fontWeight = FontWeight.ExtraBold
@@ -1151,7 +1176,7 @@ private fun TabletHubWelcomeView(
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = "Browsing r/$activeSubreddit • $postCount stories ready in Full HD",
+            text = "Browsing r/$activeSubreddit • $postCount posts loaded",
             color = TextSecondary,
             fontSize = 14.sp
         )
@@ -1222,6 +1247,8 @@ private fun TabletHubWelcomeView(
 private fun PostFeedContent(
     uiState: RedXUiState,
     listState: LazyListState,
+    galleryGridState: LazyGridState,
+    tabletGridState: LazyGridState,
     selectedPostId: String?,
     isTabletMagazine: Boolean = false,
     onPostClick: (RedditPost) -> Unit,
@@ -1236,13 +1263,10 @@ private fun PostFeedContent(
     onRefresh: () -> Unit,
     onAuthorClick: (String) -> Unit = {}
 ) {
-    val galleryGridState = rememberLazyGridState()
-    val tabletGridState = rememberLazyGridState()
-
     // Continuous auto-loader for standard feed
-    val shouldLoadMoreList by remember(uiState.posts.size, uiState.isLoading, uiState.isLoadingMore, uiState.canLoadMore) {
+    val shouldLoadMoreList by remember(uiState.posts.size, uiState.isLoading, uiState.isLoadingMore, uiState.canLoadMore, uiState.loadMoreFailed) {
         derivedStateOf {
-            if (uiState.isLoading || uiState.isLoadingMore || !uiState.canLoadMore || uiState.posts.isEmpty()) return@derivedStateOf false
+            if (uiState.isLoading || uiState.isLoadingMore || uiState.loadMoreFailed || !uiState.canLoadMore || uiState.posts.isEmpty()) return@derivedStateOf false
             val layoutInfo = listState.layoutInfo
             val total = layoutInfo.totalItemsCount
             val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
@@ -1256,9 +1280,9 @@ private fun PostFeedContent(
     }
 
     // Continuous auto-loader for gallery grid
-    val shouldLoadMoreGallery by remember(uiState.posts.size, uiState.isLoading, uiState.isLoadingMore, uiState.canLoadMore) {
+    val shouldLoadMoreGallery by remember(uiState.posts.size, uiState.isLoading, uiState.isLoadingMore, uiState.canLoadMore, uiState.loadMoreFailed) {
         derivedStateOf {
-            if (uiState.isLoading || uiState.isLoadingMore || !uiState.canLoadMore || uiState.posts.isEmpty()) return@derivedStateOf false
+            if (uiState.isLoading || uiState.isLoadingMore || uiState.loadMoreFailed || !uiState.canLoadMore || uiState.posts.isEmpty()) return@derivedStateOf false
             val layoutInfo = galleryGridState.layoutInfo
             val total = layoutInfo.totalItemsCount
             val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
@@ -1272,9 +1296,9 @@ private fun PostFeedContent(
     }
 
     // Continuous auto-loader for tablet grid
-    val shouldLoadMoreTablet by remember(uiState.posts.size, uiState.isLoading, uiState.isLoadingMore, uiState.canLoadMore) {
+    val shouldLoadMoreTablet by remember(uiState.posts.size, uiState.isLoading, uiState.isLoadingMore, uiState.canLoadMore, uiState.loadMoreFailed) {
         derivedStateOf {
-            if (uiState.isLoading || uiState.isLoadingMore || !uiState.canLoadMore || uiState.posts.isEmpty()) return@derivedStateOf false
+            if (uiState.isLoading || uiState.isLoadingMore || uiState.loadMoreFailed || !uiState.canLoadMore || uiState.posts.isEmpty()) return@derivedStateOf false
             val layoutInfo = tabletGridState.layoutInfo
             val total = layoutInfo.totalItemsCount
             val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
@@ -1290,7 +1314,15 @@ private fun PostFeedContent(
     PullToRefreshBox(
         isRefreshing = uiState.isLoading,
         onRefresh = onRefresh,
-        modifier = Modifier.fillMaxSize()
+        // Observed on the parent in the Initial pass so the edge swipe never blocks taps or
+        // scrolling underneath it (the old overlay rails swallowed events for ~72dp on
+        // each side of the feed).
+        modifier = Modifier
+            .fillMaxSize()
+            .edgeSubredditSwipe(
+                enabled = !uiState.isSearchActive && !uiState.multiSubredditMode,
+                onSwipe = onSwitchSubreddit
+            )
     ) {
         when {
         uiState.isLoading && uiState.posts.isEmpty() -> {
@@ -1317,7 +1349,7 @@ private fun PostFeedContent(
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = if (uiState.isSearchActive) "Searching Reddit for \"${uiState.activeSearchQuery}\"..." else "Loading r/${uiState.activeSubreddit} in Full HD...",
+                    text = if (uiState.isSearchActive) "Searching Reddit for \"${uiState.activeSearchQuery}\"…" else "Loading r/${uiState.activeSubreddit}…",
                     color = TextSecondary,
                     fontSize = 13.sp
                 )
@@ -1369,73 +1401,89 @@ private fun PostFeedContent(
         }
 
         else -> {
-            AnimatedContent(
-                targetState = Pair(uiState.viewMode, isTabletMagazine),
-                transitionSpec = {
-                    (fadeIn(animationSpec = tween(220)) + scaleIn(initialScale = 0.98f, animationSpec = tween(220))) togetherWith
-                            fadeOut(animationSpec = tween(180))
-                },
-                label = "feedViewTransition"
-            ) { (currentViewMode, currentTabletMagazine) ->
-                if (currentViewMode == FeedViewMode.GALLERY) {
-                    LazyVerticalGrid(
-                        state = galleryGridState,
-                        columns = GridCells.Adaptive(minSize = 130.dp),
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(4.dp)
-                    ) {
-                        items(
-                            items = uiState.posts,
-                            key = { post -> post.id }
-                        ) { post ->
-                            GalleryPostCard(
-                                post = post,
-                                isSelected = (selectedPostId == post.id),
-                                onPostClick = onPostClick,
-                                onLongClick = onLongClickPost,
-                                onMediaClick = onOpenLightbox
-                            )
-                        }
-
-                        item(span = { GridItemSpan(maxLineSpan) }) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 20.dp, horizontal = 16.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (uiState.isLoadingMore) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.Center
-                                    ) {
-                                        CircularProgressIndicator(color = RedditOrange, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                                        Spacer(modifier = Modifier.width(10.dp))
-                                        Text(text = "Loading more posts...", color = TextSecondary, fontSize = 13.sp)
-                                    }
-                                } else if (!uiState.canLoadMore) {
-                                    Text(text = "• All caught up •", color = TextTertiary, fontSize = 12.sp, modifier = Modifier.padding(bottom = 20.dp))
-                                } else {
-                                    LaunchedEffect(Unit) { onLoadMore() }
-                                    Spacer(modifier = Modifier.height(20.dp))
-                                }
-                            }
-                        }
+            // A plain branch (not AnimatedContent): the old cross-fade kept two lazy
+            // layouts alive at once, both bound to the same scroll state, which made the
+            // scroll position jump when switching view styles.
+            val currentViewMode = uiState.viewMode
+            if (currentViewMode == FeedViewMode.GALLERY) {
+                LazyVerticalGrid(
+                    state = galleryGridState,
+                    columns = GridCells.Adaptive(minSize = 130.dp),
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(4.dp)
+                ) {
+                    items(
+                        items = uiState.posts,
+                        key = { post -> post.id }
+                    ) { post ->
+                        GalleryPostCard(
+                            post = post,
+                            isSelected = (selectedPostId == post.id),
+                            onPostClick = onPostClick,
+                            onLongClick = onLongClickPost,
+                            onMediaClick = onOpenLightbox
+                        )
                     }
-                } else if (currentTabletMagazine) {
-                    // Multi-Column Responsive Grid across wide tablet screen
-                    LazyVerticalGrid(
-                        state = tabletGridState,
-                        columns = GridCells.Adaptive(minSize = 360.dp),
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        items(
-                            items = uiState.posts,
-                            key = { post -> post.id }
-                        ) { post ->
+
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        FeedFooter(
+                            isLoadingMore = uiState.isLoadingMore,
+                            canLoadMore = uiState.canLoadMore,
+                            loadMoreFailed = uiState.loadMoreFailed,
+                            onRetry = onLoadMore
+                        )
+                    }
+                }
+            } else if (isTabletMagazine) {
+                // Multi-column responsive grid across the wide tablet screen
+                LazyVerticalGrid(
+                    state = tabletGridState,
+                    columns = GridCells.Adaptive(minSize = 360.dp),
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(
+                        items = uiState.posts,
+                        key = { post -> post.id }
+                    ) { post ->
+                        PostFeedItemRenderer(
+                            viewMode = currentViewMode,
+                            post = post,
+                            selectedPostId = selectedPostId,
+                            onPostClick = onPostClick,
+                            onVote = onVote,
+                            onToggleSave = onToggleSave,
+                            onSubredditClick = onSubredditClick,
+                            onLongClickPost = onLongClickPost,
+                            onOpenLightbox = onOpenLightbox,
+                            onFlairClick = onFlairClick,
+                            onAuthorClick = onAuthorClick
+                        )
+                    }
+
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        FeedFooter(
+                            isLoadingMore = uiState.isLoadingMore,
+                            canLoadMore = uiState.canLoadMore,
+                            loadMoreFailed = uiState.loadMoreFailed,
+                            onRetry = onLoadMore
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(
+                        items = uiState.posts,
+                        key = { post -> post.id }
+                    ) { post ->
+                        Box(
+                            modifier = Modifier.animateItem()
+                        ) {
                             PostFeedItemRenderer(
                                 viewMode = currentViewMode,
                                 post = post,
@@ -1450,93 +1498,57 @@ private fun PostFeedContent(
                                 onAuthorClick = onAuthorClick
                             )
                         }
-
-                        item(span = { GridItemSpan(maxLineSpan) }) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 20.dp, horizontal = 16.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (uiState.isLoadingMore) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.Center
-                                    ) {
-                                        CircularProgressIndicator(color = RedditOrange, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                                        Spacer(modifier = Modifier.width(10.dp))
-                                        Text(text = "Loading more posts...", color = TextSecondary, fontSize = 13.sp)
-                                    }
-                                } else if (!uiState.canLoadMore) {
-                                    Text(text = "• All caught up •", color = TextTertiary, fontSize = 12.sp, modifier = Modifier.padding(bottom = 20.dp))
-                                } else {
-                                    LaunchedEffect(Unit) { onLoadMore() }
-                                    Spacer(modifier = Modifier.height(20.dp))
-                                }
-                            }
-                        }
                     }
-                } else {
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        items(
-                            items = uiState.posts,
-                            key = { post -> post.id }
-                        ) { post ->
-                            Box(
-                                modifier = Modifier.animateItem()
-                            ) {
-                                PostFeedItemRenderer(
-                                    viewMode = currentViewMode,
-                                    post = post,
-                                    selectedPostId = selectedPostId,
-                                    onPostClick = onPostClick,
-                                    onVote = onVote,
-                                    onToggleSave = onToggleSave,
-                                    onSubredditClick = onSubredditClick,
-                                    onLongClickPost = onLongClickPost,
-                                    onOpenLightbox = onOpenLightbox,
-                                    onFlairClick = onFlairClick,
-                                    onAuthorClick = onAuthorClick
-                                )
-                            }
-                        }
 
-                        item {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 20.dp, horizontal = 16.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (uiState.isLoadingMore) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.Center
-                                    ) {
-                                        CircularProgressIndicator(color = RedditOrange, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                                        Spacer(modifier = Modifier.width(10.dp))
-                                        Text(text = "Loading more posts...", color = TextSecondary, fontSize = 13.sp)
-                                    }
-                                } else if (!uiState.canLoadMore) {
-                                    Text(text = "• All caught up •", color = TextTertiary, fontSize = 12.sp, modifier = Modifier.padding(bottom = 20.dp))
-                                } else {
-                                    LaunchedEffect(Unit) { onLoadMore() }
-                                    Spacer(modifier = Modifier.height(20.dp))
-                                }
-                            }
-                        }
+                    item {
+                        FeedFooter(
+                            isLoadingMore = uiState.isLoadingMore,
+                            canLoadMore = uiState.canLoadMore,
+                            loadMoreFailed = uiState.loadMoreFailed,
+                            onRetry = onLoadMore
+                        )
                     }
                 }
             }
         }
         }
-        EdgeSubredditSwipeOverlay(
-            enabled = !uiState.isSearchActive && !uiState.multiSubredditMode,
-            onSwipe = onSwitchSubreddit
-        )
+    }
+}
+
+@Composable
+private fun FeedFooter(
+    isLoadingMore: Boolean,
+    canLoadMore: Boolean,
+    loadMoreFailed: Boolean,
+    onRetry: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 20.dp, horizontal = 16.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        when {
+            isLoadingMore -> Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                CircularProgressIndicator(color = RedditOrange, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(text = "Loading more posts…", color = TextSecondary, fontSize = 13.sp)
+            }
+            loadMoreFailed -> Button(
+                onClick = onRetry,
+                colors = ButtonDefaults.buttonColors(containerColor = RedditOrange),
+                shape = RoundedCornerShape(20.dp)
+            ) {
+                Icon(imageVector = Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(text = "Couldn't load more — tap to retry", fontSize = 13.sp)
+            }
+            !canLoadMore -> Text(text = "• All caught up •", color = TextTertiary, fontSize = 12.sp)
+            else -> Spacer(modifier = Modifier.height(20.dp))
+        }
     }
 }
 
@@ -1768,6 +1780,8 @@ private fun FeedPanel(
     uiState: RedXUiState,
     userProfile: UserProfile,
     listState: LazyListState,
+    galleryGridState: LazyGridState,
+    tabletGridState: LazyGridState,
     onPostClick: (RedditPost) -> Unit,
     onVote: (RedditPost, Int) -> Unit,
     onToggleSave: (RedditPost) -> Unit,
@@ -1817,7 +1831,13 @@ private fun FeedPanel(
         modifier = modifier.fillMaxSize(),
         containerColor = AmoledBackground,
         topBar = {
-            Column {
+            // The custom header does not consume window insets by itself, so without this
+            // the toolbar rendered underneath the status bar on edge-to-edge devices.
+            Column(
+                modifier = Modifier
+                    .background(AmoledSurface)
+                    .windowInsetsPadding(WindowInsets.statusBars)
+            ) {
                 // Phone Header Bar
                 Row(
                     modifier = Modifier
@@ -2284,6 +2304,8 @@ private fun FeedPanel(
             PostFeedContent(
                 uiState = uiState,
                 listState = listState,
+                galleryGridState = galleryGridState,
+                tabletGridState = tabletGridState,
                 selectedPostId = selectedPostId,
                 isTabletMagazine = false,
                 onPostClick = onPostClick,

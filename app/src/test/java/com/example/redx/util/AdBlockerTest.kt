@@ -17,4 +17,10 @@ class AdBlockerTest {
         assertFalse(AdBlocker.shouldBlock("https://www.reddit.com/r/android/comments/example/"))
         assertFalse(AdBlocker.shouldBlock("https://v.redd.it/example/HLSPlaylist.m3u8"))
     }
+
+    @Test
+    fun hideScriptDoesNotUseOverbroadSubstringSelectors() {
+        // [data-testid*="ad"] also matches "header" / "thread" and removed real content.
+        assertFalse(AdBlocker.HIDE_ADS_SCRIPT.contains("[data-testid*=\"ad\"]"))
+    }
 }

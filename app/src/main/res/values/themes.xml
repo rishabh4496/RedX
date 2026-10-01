@@ -1,5 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.RedX" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- RedX renders an all-dark Compose UI, so the window itself must be dark too:
+         a light parent caused a white flash on launch and light system-bar defaults. -->
+    <style name="Theme.RedX" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/redx_window_background</item>
+        <item name="android:colorBackground">@color/redx_window_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
 </resources>
