@@ -49,6 +49,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
@@ -1898,8 +1899,23 @@ fun SocialChatPostCard(
             )
             .padding(horizontal = 14.dp, vertical = 10.dp)
     ) {
-        Row(modifier = Modifier.fillMaxWidth()) {
-            // Left Column: Avatar & Timeline Connector Line
+        // The thread connector is drawn to the row's real height; the old fixed 80dp box made
+        // short (text-only) posts taller than their content.
+        val connectorColor = AmoledBorder.copy(alpha = 0.5f)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .drawBehind {
+                    val x = 21.dp.toPx()
+                    drawLine(
+                        color = connectorColor,
+                        start = Offset(x, 42.dp.toPx()),
+                        end = Offset(x, size.height),
+                        strokeWidth = 2.dp.toPx()
+                    )
+                }
+        ) {
+            // Left Column: Avatar (the connector line is drawn behind the row)
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.width(42.dp)
@@ -1923,15 +1939,6 @@ fun SocialChatPostCard(
                         fontWeight = FontWeight.Bold
                     )
                 }
-
-                // Vertical Thread Connector Line
-                Spacer(modifier = Modifier.height(4.dp))
-                Box(
-                    modifier = Modifier
-                        .width(2.dp)
-                        .height(80.dp)
-                        .background(AmoledBorder.copy(alpha = 0.5f))
-                )
             }
 
             Spacer(modifier = Modifier.width(10.dp))
