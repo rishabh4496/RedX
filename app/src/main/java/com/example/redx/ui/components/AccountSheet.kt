@@ -1,5 +1,7 @@
 package com.example.redx.ui.components
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -68,6 +70,7 @@ fun AccountSheet(
                 .clip(RoundedCornerShape(20.dp))
                 .border(1.dp, AmoledBorder, RoundedCornerShape(20.dp))
                 .background(AmoledSurface)
+                .verticalScroll(rememberScrollState())
                 .padding(20.dp)
         ) {
             // Header

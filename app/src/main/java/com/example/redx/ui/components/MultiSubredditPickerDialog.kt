@@ -1,5 +1,8 @@
 package com.example.redx.ui.components
 
+import com.example.redx.util.RedditInputValidator
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -98,7 +101,7 @@ fun MultiSubredditPickerDialog(
             }
         },
         text = {
-            Column(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
                 Text(
                     text = "Combine up to $MAX_MULTI_SUBS subreddits into one unified feed.",
                     color = TextSecondary,
@@ -130,7 +133,9 @@ fun MultiSubredditPickerDialog(
                     Spacer(modifier = Modifier.width(8.dp))
                     IconButton(
                         onClick = {
-                            val clean = customInput.trim().lowercase()
+                            // Validate like the feed layer does; "a b" or "a+b" would otherwise be
+                            // accepted here and silently dropped when the multi-feed is built.
+                            val clean = RedditInputValidator.normalizeSubreddit(customInput)?.lowercase().orEmpty()
                             if (clean.isNotBlank() && !selectedSubs.contains(clean) && selectedSubs.size < MAX_MULTI_SUBS) {
                                 selectedSubs.add(clean)
                                 customInput = ""

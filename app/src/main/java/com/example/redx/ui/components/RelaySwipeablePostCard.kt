@@ -69,15 +69,20 @@ fun RelaySwipeablePostCard(
         label = "relayOffset"
     )
 
+    // The drawer is only composed (and its backdrop only painted) while the card is
+    // swiped. Previously the wrapper added its own 10dp margin on top of PostCard's and
+    // painted an elevated slab behind every card at rest, so default-view cards were
+    // narrower than every other style and sat inside a visible box.
+    val isRevealed = targetOffset != 0f || animatedOffset < -1f
+
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 10.dp, vertical = 4.dp)
             .clip(RoundedCornerShape(14.dp))
-            .background(AmoledSurfaceElevated)
+            .then(if (isRevealed) Modifier.background(AmoledSurfaceElevated) else Modifier)
     ) {
         // Background: Relay Action Drawer
-        Row(
+        if (isRevealed) Row(
             modifier = Modifier
                 .matchParentSize()
                 .padding(end = 8.dp),

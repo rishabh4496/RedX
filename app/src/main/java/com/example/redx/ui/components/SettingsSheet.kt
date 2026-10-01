@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Visibility
@@ -70,6 +71,8 @@ fun SettingsSheet(
     currentFontScale: FontScale,
     hideReadPosts: Boolean,
     showMatureContent: Boolean,
+    autoplayVideos: Boolean,
+    onToggleAutoplay: (Boolean) -> Unit,
     onToggleHideRead: (Boolean) -> Unit,
     onToggleMature: (Boolean) -> Unit,
     onOpenAppearance: () -> Unit,
@@ -171,6 +174,13 @@ fun SettingsSheet(
                 subtitle = "Keep posts you have opened out of the feed",
                 checked = hideReadPosts,
                 onCheckedChange = onToggleHideRead
+            )
+            SettingsSwitchRow(
+                icon = Icons.Default.PlayCircle,
+                title = "Autoplay videos in feed",
+                subtitle = "Off saves data and battery: videos show a poster until tapped",
+                checked = autoplayVideos,
+                onCheckedChange = onToggleAutoplay
             )
             SettingsSwitchRow(
                 icon = Icons.Default.Security,

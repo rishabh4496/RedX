@@ -64,12 +64,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.net.toUri
+import androidx.compose.runtime.compositionLocalOf
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
 import androidx.core.text.htmlEncode
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.Locale
 import kotlin.math.abs
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -81,6 +86,15 @@ import androidx.media3.ui.PlayerView
 import com.example.redx.theme.RedditOrange
 import com.example.redx.util.UrlSafety
 import com.example.redx.util.AdBlocker
+
+/** Whether feed videos may start by themselves (user setting). Detail/lightbox always play. */
+val LocalAutoplayVideos = compositionLocalOf { true }
+
+/**
+ * True while a full-screen layer (lightbox, reader sheet) covers the feed. Feed videos pause
+ * instead of decoding and buffering invisibly underneath audio the user is listening to.
+ */
+val LocalFeedVideosPaused = compositionLocalOf { false }
 
 private fun formatPlayerTime(ms: Long): String {
     val totalSeconds = (ms / 1000).coerceAtLeast(0)
@@ -98,6 +112,7 @@ fun VideoPlayerView(
     thumbnailUrl: String? = null,
     autoPlay: Boolean = true,
     isMuted: Boolean = true,
+    isFeedItem: Boolean = false,
     onFullscreen: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
@@ -127,6 +142,20 @@ fun VideoPlayerView(
             safeVideoUrl.contains("redgifs.com/ifr/", ignoreCase = true)
     val isDirectVideo = !isRedGifsEmbed
 
+    // Feed items only spin up a player (or, worse, a JavaScript WebView for RedGifs embeds)
+    // when autoplay is on and the item is a real video stream, or once the user taps play.
+    // Previously every video card in the feed created a player immediately.
+    val feedAutoplayAllowed = LocalAutoplayVideos.current && isDirectVideo
+    var userStartedPlayback by remember(safeVideoUrl) { mutableStateOf(false) }
+    if (isFeedItem && !feedAutoplayAllowed && !userStartedPlayback) {
+        VideoPoster(
+            thumbnailUrl = thumbnailUrl,
+            modifier = modifier,
+            onPlay = { userStartedPlayback = true }
+        )
+        return
+    }
+
     val resolvedUrl = remember(safeVideoUrl) {
         when {
             safeVideoUrl.contains("v.redd.it", ignoreCase = true) &&
@@ -146,6 +175,7 @@ fun VideoPlayerView(
     if (isDirectVideo) {
         // Use Media3 ExoPlayer with HLS/DASH/MP4 support and cross-protocol redirect support
         var isBuffering by remember { mutableStateOf(true) }
+        var hasRenderedFirstFrame by remember(resolvedUrl) { mutableStateOf(false) }
         var hasError by remember { mutableStateOf(false) }
         var mutedState by remember { mutableStateOf(isMuted) }
         var currentSpeed by remember { mutableFloatStateOf(1.0f) }
@@ -191,6 +221,22 @@ fun VideoPlayerView(
                     repeatMode = Player.REPEAT_MODE_ONE
                     volume = if (isMuted) 0f else 1f
                     setPlaybackSpeed(currentSpeed)
+                    // Only take audio focus (pausing the user's music) when sound is actually on,
+                    // and pause when headphones are unplugged.
+                    setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(C.USAGE_MEDIA)
+                            .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+                            .build(),
+                        !isMuted
+                    )
+                    setHandleAudioBecomingNoisy(true)
+                    if (isFeedItem) {
+                        // Inline previews don't need more than 720p; this saves data and decoder memory.
+                        trackSelectionParameters = trackSelectionParameters.buildUpon()
+                            .setMaxVideoSize(1280, 720)
+                            .build()
+                    }
 
                     addListener(object : Player.Listener {
                         override fun onPlaybackStateChanged(playbackState: Int) {
@@ -205,6 +251,10 @@ fun VideoPlayerView(
 
                         override fun onIsPlayingChanged(playing: Boolean) {
                             isPlaying = playing
+                        }
+
+                        override fun onRenderedFirstFrame() {
+                            hasRenderedFirstFrame = true
                         }
 
                         override fun onPlayerError(error: PlaybackException) {
@@ -266,6 +316,20 @@ fun VideoPlayerView(
             exoPlayer.volume = if (isMuted) 0f else 1f
         }
 
+        // Pause feed videos while something covers the feed, and resume only the ones
+        // that were playing.
+        val feedPaused = isFeedItem && LocalFeedVideosPaused.current
+        var resumeAfterFeedPause by remember { mutableStateOf(false) }
+        LaunchedEffect(feedPaused, exoPlayer) {
+            if (feedPaused) {
+                resumeAfterFeedPause = exoPlayer.isPlaying
+                exoPlayer.pause()
+            } else if (resumeAfterFeedPause) {
+                resumeAfterFeedPause = false
+                exoPlayer.play()
+            }
+        }
+
         LaunchedEffect(seekFeedbackText) {
             if (seekFeedbackText != null) {
                 delay(650)
@@ -324,6 +388,24 @@ fun VideoPlayerView(
                 }
             )
 
+            // Show the poster until the first video frame is on screen instead of a black box
+            // with a spinner. Skipped when the "thumbnail" is really the video URL, which would
+            // make the image loader try to download the stream.
+            val posterUrl = thumbnailUrl?.takeIf {
+                it.isNotBlank() &&
+                    !UrlSafety.hasExtension(it, "mp4", "webm", "m3u8", "gifv") &&
+                    !it.contains("v.redd.it/", ignoreCase = true) &&
+                    !it.contains("redgifs.com", ignoreCase = true)
+            }
+            if (!hasRenderedFirstFrame && !hasError && posterUrl != null) {
+                AsyncImage(
+                    model = posterUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+
             // Touch gesture detector layer (tap, double tap, drag scrub, hold for 2x)
             Box(
                 modifier = Modifier
@@ -331,6 +413,9 @@ fun VideoPlayerView(
                     .pointerInput(exoPlayer) {
                         var lastTapTime = 0L
                         var lastTapPos = androidx.compose.ui.geometry.Offset.Zero
+                        // The first tap of a double tap already toggled play/pause; remember
+                        // what it was so a seek double-tap doesn't leave the video paused.
+                        var wasPlayingBeforeFirstTap = false
 
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false)
@@ -338,79 +423,102 @@ fun VideoPlayerView(
                             val downPos = down.position
                             val isDoubleTapCandidate = (downTime - lastTapTime < 320L) &&
                                     ((downPos - lastTapPos).getDistance() < 120f)
+                            val touchSlop = viewConfiguration.touchSlop
 
                             var isHold2xActive = false
                             var isDragStarted = false
+                            var movedBeyondSlop = false
                             val startScrub = exoPlayer.currentPosition
                             var dragDistanceX = 0f
 
                             val holdJob = coroutineScope.launch {
                                 delay(350)
-                                if (!isDragStarted && !isDoubleTapCandidate) {
+                                if (!isDragStarted && !movedBeyondSlop && !isDoubleTapCandidate) {
                                     isHold2xActive = true
                                     isHolding2x = true
                                     exoPlayer.setPlaybackSpeed(2.0f)
                                 }
                             }
 
-                            while (true) {
-                                val event = awaitPointerEvent()
-                                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            try {
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
 
-                                if (!change.pressed) {
-                                    holdJob.cancel()
-                                    if (isHold2xActive) {
-                                        isHolding2x = false
-                                        exoPlayer.setPlaybackSpeed(currentSpeed)
-                                    } else if (isDragStarted) {
-                                        exoPlayer.seekTo(scrubPosition)
-                                        isScrubbing = false
-                                    } else if (isDoubleTapCandidate) {
-                                        val width = size.width
-                                        val dur = if (exoPlayer.duration > 0) exoPlayer.duration else 60000L
-                                        if (downPos.x < width * 0.4f) {
-                                            val newPos = maxOf(0L, exoPlayer.currentPosition - 10000L)
-                                            exoPlayer.seekTo(newPos)
-                                            seekFeedbackText = "-10s"
-                                            seekFeedbackSide = -1
-                                        } else if (downPos.x > width * 0.6f) {
-                                            val newPos = minOf(dur, exoPlayer.currentPosition + 10000L)
-                                            exoPlayer.seekTo(newPos)
-                                            seekFeedbackText = "+10s"
-                                            seekFeedbackSide = 1
+                                    if (!change.pressed) {
+                                        // A finger that moved (feed scroll) or whose movement the
+                                        // parent list consumed is not a tap. Previously scrolling the
+                                        // feed with a finger on a video toggled play/pause on release.
+                                        if (isHold2xActive || isDragStarted) {
+                                            // handled by the finally block / seek below
+                                        } else if (movedBeyondSlop || change.isConsumed) {
+                                            // not a tap
+                                        } else if (isDoubleTapCandidate) {
+                                            val width = size.width
+                                            val dur = if (exoPlayer.duration > 0) exoPlayer.duration else 60000L
+                                            if (downPos.x < width * 0.4f) {
+                                                val newPos = maxOf(0L, exoPlayer.currentPosition - 10000L)
+                                                exoPlayer.seekTo(newPos)
+                                                if (wasPlayingBeforeFirstTap) exoPlayer.play() else exoPlayer.pause()
+                                                seekFeedbackText = "-10s"
+                                                seekFeedbackSide = -1
+                                            } else if (downPos.x > width * 0.6f) {
+                                                val newPos = minOf(dur, exoPlayer.currentPosition + 10000L)
+                                                exoPlayer.seekTo(newPos)
+                                                if (wasPlayingBeforeFirstTap) exoPlayer.play() else exoPlayer.pause()
+                                                seekFeedbackText = "+10s"
+                                                seekFeedbackSide = 1
+                                            }
+                                            // Centre double-tap: the first tap already toggled playback.
+                                            lastTapTime = 0L
                                         } else {
-                                            if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
+                                            lastTapTime = downTime
+                                            lastTapPos = downPos
+                                            wasPlayingBeforeFirstTap = exoPlayer.isPlaying
+                                            if (exoPlayer.isPlaying) {
+                                                exoPlayer.pause()
+                                            } else {
+                                                exoPlayer.play()
+                                            }
                                         }
-                                        lastTapTime = 0L
-                                    } else {
-                                        lastTapTime = downTime
-                                        lastTapPos = downPos
-                                        if (exoPlayer.isPlaying) {
-                                            exoPlayer.pause()
-                                        } else {
-                                            exoPlayer.play()
-                                        }
+                                        if (isDragStarted) exoPlayer.seekTo(scrubPosition)
+                                        break
                                     }
-                                    break
-                                }
 
-                                val deltaX = change.position.x - downPos.x
-                                val deltaY = change.position.y - downPos.y
+                                    val deltaX = change.position.x - downPos.x
+                                    val deltaY = change.position.y - downPos.y
+                                    if (!movedBeyondSlop && (abs(deltaX) > touchSlop || abs(deltaY) > touchSlop)) {
+                                        movedBeyondSlop = true
+                                    }
 
-                                if (!isDragStarted && !isHold2xActive && abs(deltaX) > 24f && abs(deltaX) > abs(deltaY)) {
-                                    holdJob.cancel()
-                                    isDragStarted = true
-                                    isScrubbing = true
-                                    scrubStartPosition = startScrub
-                                    dragDistanceX = deltaX
-                                    change.consume()
-                                } else if (isDragStarted) {
-                                    change.consume()
-                                    dragDistanceX = change.position.x - downPos.x
-                                    val dur = if (exoPlayer.duration > 0) exoPlayer.duration else 60000L
-                                    val deltaMs = (dragDistanceX * 120f).toLong()
-                                    scrubPosition = (startScrub + deltaMs).coerceIn(0L, dur)
+                                    if (!isDragStarted && !isHold2xActive && abs(deltaX) > 24f && abs(deltaX) > abs(deltaY)) {
+                                        holdJob.cancel()
+                                        isDragStarted = true
+                                        isScrubbing = true
+                                        scrubStartPosition = startScrub
+                                        dragDistanceX = deltaX
+                                        change.consume()
+                                    } else if (isDragStarted) {
+                                        change.consume()
+                                        dragDistanceX = change.position.x - downPos.x
+                                        val dur = if (exoPlayer.duration > 0) exoPlayer.duration else 60000L
+                                        val deltaMs = (dragDistanceX * 120f).toLong()
+                                        scrubPosition = (startScrub + deltaMs).coerceIn(0L, dur)
+                                    } else if (!isHold2xActive && movedBeyondSlop && abs(deltaY) > abs(deltaX)) {
+                                        // Vertical movement belongs to the feed's scroll; stop tracking.
+                                        break
+                                    }
                                 }
+                            } finally {
+                                // Runs however the gesture ends (release, cancel, scroll takeover,
+                                // composable disposed) so 2x speed / scrubbing can never stick.
+                                holdJob.cancel()
+                                if (isHold2xActive) {
+                                    isHold2xActive = false
+                                    isHolding2x = false
+                                    exoPlayer.setPlaybackSpeed(currentSpeed)
+                                }
+                                if (isDragStarted) isScrubbing = false
                             }
                         }
                     }
@@ -530,7 +638,7 @@ fun VideoPlayerView(
                     verticalArrangement = Arrangement.Center
                 ) {
                     Text(
-                        text = "Video stream issue on Reddit CDN",
+                        text = "Couldn't play this video",
                         color = Color.White,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium
@@ -545,7 +653,7 @@ fun VideoPlayerView(
                         colors = ButtonDefaults.buttonColors(containerColor = RedditOrange),
                         shape = RoundedCornerShape(16.dp)
                     ) {
-                        Text(text = "Retry Stream", fontSize = 12.sp)
+                        Text(text = "Retry", fontSize = 12.sp)
                     }
                 }
             }
@@ -653,6 +761,14 @@ fun VideoPlayerView(
                     onClick = {
                         mutedState = !mutedState
                         exoPlayer.volume = if (mutedState) 0f else 1f
+                        // Unmuting claims audio focus; muting releases it.
+                        exoPlayer.setAudioAttributes(
+                            AudioAttributes.Builder()
+                                .setUsage(C.USAGE_MEDIA)
+                                .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+                                .build(),
+                            !mutedState
+                        )
                     },
                     modifier = Modifier
                         .clip(CircleShape)
@@ -670,6 +786,20 @@ fun VideoPlayerView(
         }
     } else {
         // Hardware-Accelerated Embed Player for redgifs and web embeds
+        var embedWebView by remember { mutableStateOf<WebView?>(null) }
+        val embedLifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+        // A WebView keeps playing audio and running JS when the app is backgrounded unless told to pause.
+        DisposableEffect(embedLifecycleOwner, embedWebView) {
+            val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+                when (event) {
+                    androidx.lifecycle.Lifecycle.Event.ON_PAUSE -> embedWebView?.onPause()
+                    androidx.lifecycle.Lifecycle.Event.ON_RESUME -> embedWebView?.onResume()
+                    else -> {}
+                }
+            }
+            embedLifecycleOwner.lifecycle.addObserver(observer)
+            onDispose { embedLifecycleOwner.lifecycle.removeObserver(observer) }
+        }
         Box(
             modifier = modifier
                 .fillMaxWidth()
@@ -681,6 +811,7 @@ fun VideoPlayerView(
                 modifier = Modifier.fillMaxSize(),
                 factory = { ctx ->
                     WebView(ctx).apply {
+                        embedWebView = this
                         layoutParams = ViewGroup.LayoutParams(
                             ViewGroup.LayoutParams.MATCH_PARENT,
                             ViewGroup.LayoutParams.MATCH_PARENT
@@ -733,9 +864,49 @@ fun VideoPlayerView(
                     }
                 },
                 onRelease = { webView ->
+                    embedWebView = null
                     webView.stopLoading()
                     webView.destroy()
                 }
+            )
+        }
+    }
+}
+
+@Composable
+private fun VideoPoster(
+    thumbnailUrl: String?,
+    modifier: Modifier,
+    onPlay: () -> Unit
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color.Black)
+            .clickable(onClick = onPlay),
+        contentAlignment = Alignment.Center
+    ) {
+        if (!thumbnailUrl.isNullOrBlank()) {
+            AsyncImage(
+                model = thumbnailUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+        Box(
+            modifier = Modifier
+                .size(54.dp)
+                .clip(CircleShape)
+                .background(Color.Black.copy(alpha = 0.7f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.PlayArrow,
+                contentDescription = "Play video",
+                tint = RedditOrange,
+                modifier = Modifier.size(36.dp)
             )
         }
     }

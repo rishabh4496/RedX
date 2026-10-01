@@ -27,7 +27,9 @@ class SavedPostsManager(context: Context) {
         try {
             val array = JSONArray(jsonString)
             for (i in 0 until array.length()) {
-                val obj = array.getJSONObject(i)
+                // One corrupt entry used to discard every saved post after it.
+                val obj = array.optJSONObject(i) ?: continue
+                runCatching {
                 list.add(
                     RedditPost(
                         id = obj.getString("id"),
@@ -53,9 +55,11 @@ class SavedPostsManager(context: Context) {
                         isSaved = true,
                         galleryImageUrls = obj.optJSONArray("galleryImageUrls")?.let { arr ->
                             (0 until arr.length()).mapNotNull { idx -> arr.optString(idx).takeIf { s -> s.isNotBlank() } }
-                        } ?: emptyList()
+                        } ?: emptyList(),
+                        hasMetrics = obj.optBoolean("hasMetrics", true)
                     )
                 )
+                }
             }
         } catch (e: Exception) {
             // Ignore parse errors
@@ -87,6 +91,7 @@ class SavedPostsManager(context: Context) {
                 put("isNsfw", p.isNsfw)
                 put("isSpoiler", p.isSpoiler)
                 put("userVote", p.userVote)
+                put("hasMetrics", p.hasMetrics)
                 if (p.galleryImageUrls.isNotEmpty()) {
                     put("galleryImageUrls", JSONArray(p.galleryImageUrls))
                 }
@@ -127,8 +132,20 @@ class SavedPostsManager(context: Context) {
     }
 
     private fun loadFavoriteSubreddits(): List<String> {
-        val saved = prefs.getStringSet(KEY_FAVORITES, setOf("technology", "android", "gaming", "AskReddit"))
-        return saved?.toList() ?: listOf("technology", "android", "gaming", "AskReddit")
+        // Favourites are stored as an ordered JSON array. The previous StringSet had no
+        // order, so most-recently-added favourites reshuffled on every launch.
+        prefs.getString(KEY_FAVORITES_ORDERED, null)?.let { json ->
+            runCatching {
+                val array = JSONArray(json)
+                return (0 until array.length()).mapNotNull { array.optString(it).trim().takeIf(String::isNotBlank) }
+            }
+        }
+        val legacy = prefs.getStringSet(KEY_FAVORITES, null)
+        return legacy?.toList() ?: DEFAULT_FAVORITES
+    }
+
+    private fun persistFavorites(list: List<String>) {
+        prefs.edit { putString(KEY_FAVORITES_ORDERED, JSONArray(list).toString()) }
     }
 
     fun toggleFavoriteSubreddit(sub: String): Boolean {
@@ -144,7 +161,7 @@ class SavedPostsManager(context: Context) {
             isNowFav = true
         }
 
-        prefs.edit { putStringSet(KEY_FAVORITES, current.toSet()) }
+        persistFavorites(current)
         _favoriteSubreddits.value = current
         return isNowFav
     }
@@ -157,5 +174,7 @@ class SavedPostsManager(context: Context) {
     companion object {
         private const val KEY_SAVED_POSTS = "saved_posts_json"
         private const val KEY_FAVORITES = "favorite_subreddits_set"
+        private const val KEY_FAVORITES_ORDERED = "favorite_subreddits_ordered"
+        private val DEFAULT_FAVORITES = listOf("technology", "android", "gaming", "AskReddit")
     }
 }

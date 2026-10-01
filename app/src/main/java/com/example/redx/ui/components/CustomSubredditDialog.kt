@@ -1,5 +1,7 @@
 package com.example.redx.ui.components
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -78,6 +80,7 @@ fun CustomSubredditDialog(
                 .clip(RoundedCornerShape(18.dp))
                 .border(1.dp, AmoledBorder, RoundedCornerShape(18.dp))
                 .background(AmoledSurface)
+                .verticalScroll(rememberScrollState())
                 .padding(20.dp)
         ) {
             // Header

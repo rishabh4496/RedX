@@ -28,13 +28,16 @@ data class RedditPost(
     val isRead: Boolean = false,
     val galleryImageUrls: List<String> = emptyList(),
     val awardsCount: Int = 0,
-    val topAwardIcon: String? = null
+    val topAwardIcon: String? = null,
+    /** False for RSS-sourced posts: Reddit's Atom feed carries no score or comment count. */
+    val hasMetrics: Boolean = true
 ) {
     val isGallery: Boolean
         get() = galleryImageUrls.isNotEmpty()
 
     val displayScore: String
         get() = when {
+            !hasMetrics -> "–"
             score >= 1_000_000 -> String.format(Locale.US, "%.1fM", score / 1_000_000.0)
             score >= 1_000 -> String.format(Locale.US, "%.1fk", score / 1_000.0)
             else -> score.toString()
@@ -42,6 +45,7 @@ data class RedditPost(
 
     val displayComments: String
         get() = when {
+            !hasMetrics -> "–"
             numComments >= 1_000 -> String.format(Locale.US, "%.1fk", numComments / 1_000.0)
             else -> numComments.toString()
         }

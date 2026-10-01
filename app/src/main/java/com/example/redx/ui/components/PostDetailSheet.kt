@@ -256,7 +256,7 @@ fun PostDetailContent(
                 onClick = { selectedTab = 1 },
                 text = {
                     Text(
-                        text = "Comments (${post.displayComments})",
+                        text = if (post.hasMetrics) "Comments (${post.displayComments})" else "Comments",
                         fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal,
                         color = if (selectedTab == 1) RedditOrange else TextSecondary
                     )
@@ -793,16 +793,9 @@ fun PostDetailContent(
                                 loadUrl(loadUrl)
                             }
                         },
-                        update = { webView ->
-                            val loadUrl = if (useOldReddit) {
-                                baseCommentUrl.replace("www.reddit.com", "old.reddit.com")
-                            } else {
-                                baseCommentUrl
-                            }
-                            if (webView.url != loadUrl) {
-                                webView.loadUrl(loadUrl)
-                            }
-                        },
+                        // No `update` block on purpose: it used to reload the original URL on every
+                        // recomposition, throwing the reader back out of any thread they had
+                        // navigated into (and re-triggering whenever Reddit redirected).
                         onRelease = { webView ->
                             webView.stopLoading()
                             webView.destroy()

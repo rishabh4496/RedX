@@ -169,8 +169,8 @@ fun MediaLightboxDialog(
                                 scale = newScale
 
                                 if (newScale > 1f) {
-                                    val maxOffsetX = 800f * (newScale - 1f)
-                                    val maxOffsetY = 1200f * (newScale - 1f)
+                                    val maxOffsetX = size.width / 2f * (newScale - 1f)
+                                    val maxOffsetY = size.height / 2f * (newScale - 1f)
                                     offsetX = (offsetX + pan.x).coerceIn(-maxOffsetX, maxOffsetX)
                                     offsetY = (offsetY + pan.y).coerceIn(-maxOffsetY, maxOffsetY)
                                 } else {

@@ -49,6 +49,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -147,14 +149,15 @@ fun RelayPostCard(
         ),
         shape = RoundedCornerShape(12.dp)
     ) {
-        Row(modifier = Modifier.fillMaxWidth()) {
-            // Left Accent Bar (Relay signature feature)
-            Box(
-                modifier = Modifier
-                    .width(6.dp)
-                    .fillMaxSize()
-                    .background(subColor)
-            )
+        // The accent bar is drawn behind the row: inside a list item the Row has unbounded
+        // height, so a fillMaxSize() child collapsed to nothing and the bar never showed.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .drawBehind { drawRect(color = subColor, size = Size(6.dp.toPx(), size.height)) }
+        ) {
+            // Left Accent Bar (Relay signature feature) — reserve its width
+            Spacer(modifier = Modifier.width(6.dp))
 
             Column(
                 modifier = Modifier
@@ -231,6 +234,7 @@ fun RelayPostCard(
                             modifier = Modifier.fillMaxSize(),
                             autoPlay = true,
                             isMuted = true,
+                            isFeedItem = true,
                             onFullscreen = { onMediaClick?.invoke(post.videoUrl, post.title) }
                         )
                     }
@@ -696,6 +700,7 @@ fun FullBleedPostCard(
                     modifier = Modifier.fillMaxSize(),
                     autoPlay = true,
                     isMuted = true,
+                    isFeedItem = true,
                     onFullscreen = { onMediaClick?.invoke(post.videoUrl, post.title) }
                 )
             } else if (!mediaUrl.isNullOrBlank()) {
@@ -1171,6 +1176,7 @@ fun MagazinePostCard(
                         modifier = Modifier.fillMaxSize(),
                         autoPlay = true,
                         isMuted = true,
+                        isFeedItem = true,
                         onFullscreen = { onMediaClick?.invoke(post.videoUrl, post.title) }
                     )
                 }
@@ -1368,7 +1374,8 @@ fun BigTilesPostCard(
                         thumbnailUrl = mediaUrl,
                         modifier = Modifier.fillMaxSize(),
                         autoPlay = true,
-                        isMuted = true
+                        isMuted = true,
+                        isFeedItem = true
                     )
                 } else if (!mediaUrl.isNullOrBlank()) {
                     val targetMedia = if (post.isMediaVideo) (post.videoUrl ?: post.contentUrl) else mediaUrl
@@ -1698,7 +1705,8 @@ fun StreamlinePostCard(
                         thumbnailUrl = mediaUrl,
                         modifier = Modifier.fillMaxSize(),
                         autoPlay = true,
-                        isMuted = true
+                        isMuted = true,
+                        isFeedItem = true
                     )
                 }
             } else if (!mediaUrl.isNullOrBlank()) {
@@ -1981,7 +1989,8 @@ fun SocialChatPostCard(
                             thumbnailUrl = mediaUrl,
                             modifier = Modifier.fillMaxSize(),
                             autoPlay = true,
-                            isMuted = true
+                            isMuted = true,
+                            isFeedItem = true
                         )
                     }
                 } else if (!mediaUrl.isNullOrBlank()) {

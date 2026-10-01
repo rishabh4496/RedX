@@ -12,6 +12,13 @@ class PostSpeechManager(context: Context) {
 
     private var tts: TextToSpeech? = null
     private var isInitialized = false
+    @Volatile private var lastUtteranceId: String? = null
+    // Utterance ids carry a generation so late callbacks from a superseded session
+    // (e.g. onStop after stop() + speak()) can't flip the new session's state.
+    @Volatile private var generation = 0
+
+    private fun isCurrent(utteranceId: String?): Boolean =
+        utteranceId != null && utteranceId.startsWith("REDX_${generation}_")
 
     private val _isSpeaking = MutableStateFlow(false)
     val isSpeaking: StateFlow<Boolean> = _isSpeaking.asStateFlow()
@@ -22,7 +29,12 @@ class PostSpeechManager(context: Context) {
     init {
         tts = TextToSpeech(context.applicationContext) { status ->
             if (status == TextToSpeech.SUCCESS) {
-                tts?.language = Locale.US
+                // Prefer the device language; fall back to US English only if unsupported.
+                val engine = tts
+                val result = engine?.setLanguage(Locale.getDefault())
+                if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                    engine?.setLanguage(Locale.US)
+                }
                 isInitialized = true
                 tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                     override fun onStart(utteranceId: String?) {
@@ -30,12 +42,17 @@ class PostSpeechManager(context: Context) {
                     }
 
                     override fun onDone(utteranceId: String?) {
-                        _isSpeaking.value = false
+                        // Only the last queued chunk ends the session.
+                        if (utteranceId == lastUtteranceId) _isSpeaking.value = false
+                    }
+
+                    override fun onStop(utteranceId: String?, interrupted: Boolean) {
+                        if (isCurrent(utteranceId)) _isSpeaking.value = false
                     }
 
                     @Suppress("OVERRIDE_DEPRECATION")
                     override fun onError(utteranceId: String?) {
-                        _isSpeaking.value = false
+                        if (isCurrent(utteranceId)) _isSpeaking.value = false
                     }
                 })
             }
@@ -45,9 +62,23 @@ class PostSpeechManager(context: Context) {
     fun speak(text: String) {
         if (!isInitialized || text.isBlank()) return
         stop()
-        tts?.setSpeechRate(_speechRate.value)
-        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "REDX_POST_SPEECH")
-        _isSpeaking.value = true
+        val engine = tts ?: return
+        // The engine rejects input over getMaxSpeechInputLength(), so long posts are queued
+        // as several chunks instead of failing silently.
+        val limit = minOf(TextToSpeech.getMaxSpeechInputLength() - 100, SpeechChunker.DEFAULT_MAX_LENGTH)
+        val chunks = SpeechChunker.chunk(text, limit.coerceAtLeast(500))
+        if (chunks.isEmpty()) return
+        engine.setSpeechRate(_speechRate.value)
+        val gen = ++generation
+        lastUtteranceId = "REDX_${gen}_${chunks.lastIndex}"
+        var started = false
+        chunks.forEachIndexed { index, chunk ->
+            val mode = if (index == 0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
+            val status = engine.speak(chunk, mode, null, "REDX_${gen}_$index")
+            if (status == TextToSpeech.SUCCESS) started = true
+        }
+        // Only claim to be speaking if the engine actually accepted something.
+        _isSpeaking.value = started
     }
 
     fun stop() {
