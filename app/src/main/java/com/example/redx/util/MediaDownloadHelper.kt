@@ -2,6 +2,7 @@ package com.example.redx.util
 
 import android.app.DownloadManager
 import android.content.Context
+import android.os.Build
 import android.os.Environment
 import android.widget.Toast
 
@@ -13,6 +14,15 @@ object MediaDownloadHelper {
     fun downloadMedia(context: Context, mediaUrl: String, title: String) {
         if (mediaUrl.isBlank()) {
             Toast.makeText(context, "No media URL to download", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        // RedGifs "videos" are embed pages and other HLS playlists are not single files:
+        // DownloadManager would save the HTML/playlist text under an image/video name.
+        if (mediaUrl.contains("redgifs.com", ignoreCase = true) ||
+            (UrlSafety.hasExtension(mediaUrl, "m3u8") && !mediaUrl.contains("v.redd.it", ignoreCase = true))
+        ) {
+            Toast.makeText(context, "This video type can't be downloaded. Use Open in Browser instead.", Toast.LENGTH_LONG).show()
             return
         }
 
@@ -52,7 +62,14 @@ object MediaDownloadHelper {
                 addRequestHeader("User-Agent", DOWNLOAD_USER_AGENT)
                 addRequestHeader("Referer", "https://www.reddit.com/")
                 setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
+                } else {
+                    // Writing to the shared Downloads folder on Android 8-9 needs the legacy
+                    // storage permission, which RedX deliberately doesn't request; the app's
+                    // own downloads folder works without it.
+                    setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, fileName)
+                }
                 setAllowedOverMetered(true)
                 setAllowedOverRoaming(true)
             }
@@ -60,7 +77,7 @@ object MediaDownloadHelper {
             val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
             downloadManager.enqueue(request)
 
-            Toast.makeText(context, "Downloading to Downloads folder...", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Downloading… check the notification when it finishes", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             Toast.makeText(context, "Download failed: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
         }

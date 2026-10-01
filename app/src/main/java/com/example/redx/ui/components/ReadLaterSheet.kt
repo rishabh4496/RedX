@@ -193,7 +193,7 @@ private fun ReadLaterItem(entry: ReadLaterEntry, onRemove: () -> Unit) {
             .border(1.dp, AmoledBorder.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
             .clickable {
                 UrlSafety.httpUriOrNull(entry.permalink)?.let { uri ->
-                    context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+                    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, uri)) }
                 }
             }
             .padding(10.dp),
@@ -240,7 +240,7 @@ private fun ReadLaterItem(entry: ReadLaterEntry, onRemove: () -> Unit) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             IconButton(onClick = {
                 UrlSafety.httpUriOrNull(entry.permalink)?.let { uri ->
-                    context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+                    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, uri)) }
                 }
             }, modifier = Modifier.size(28.dp)) {
                 Icon(imageVector = Icons.Default.OpenInBrowser, contentDescription = "Open", tint = TextSecondary, modifier = Modifier.size(16.dp))

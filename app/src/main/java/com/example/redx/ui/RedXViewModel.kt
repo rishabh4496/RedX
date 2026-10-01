@@ -308,8 +308,15 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun loadFeed(subreddit: String? = null, sort: FeedSort? = null, forceRefresh: Boolean = false) {
+        val requestedSub = (subreddit ?: _uiState.value.activeSubreddit).ifBlank { "popular" }
+        // Validate before touching any state: an invalid name used to be saved into the
+        // "recent subreddits" list and become the active feed before the fetch rejected it.
+        val targetSub = RedditInputValidator.normalizeSubredditTarget(requestedSub)
+        if (targetSub == null) {
+            showTransientMessage("\"$requestedSub\" isn't a valid subreddit name")
+            return
+        }
         val requestId = ++requestGeneration
-        val targetSub = (subreddit ?: _uiState.value.activeSubreddit).ifBlank { "popular" }
         // A composite target is a transient feed URL, not a single subreddit.
         // Keep it out of the recent-chip list so it cannot reappear as a giant
         // `r/foo+bar` chip after leaving multi-feed mode.
@@ -788,13 +795,25 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
             url.contains("redgifs.com", ignoreCase = true) ||
             url.contains(".mp4", ignoreCase = true)
 
+        // Feed cards only pass a single URL, so recover the gallery from the post it came
+        // from; without this the lightbox's multi-image navigation could never appear.
+        val resolvedGallery = galleryUrls.ifEmpty { findGalleryContaining(url) }
+
         _uiState.value = _uiState.value.copy(
             lightboxMediaUrl = url,
             lightboxMediaTitle = title,
             lightboxVideoUrl = videoUrl ?: if (detectedVideo) url else null,
             lightboxIsVideo = detectedVideo,
-            lightboxGalleryUrls = galleryUrls
+            lightboxGalleryUrls = resolvedGallery
         )
+    }
+
+    private fun findGalleryContaining(url: String): List<String> {
+        val state = _uiState.value
+        val candidates = state.posts + listOfNotNull(state.selectedPost, state.quickActionsPost)
+        return candidates.firstOrNull { post ->
+            post.isGallery && (url in post.galleryImageUrls || url == post.displayImageUrl)
+        }?.galleryImageUrls.orEmpty()
     }
 
     fun closeLightbox() {

@@ -1,5 +1,7 @@
 package com.example.redx.ui.components
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -68,7 +70,8 @@ fun PostShareDialog(
 
     val markdownSnippet = buildString {
         appendLine("### [${post.title}](${post.permalink})")
-        appendLine("> Posted by **u/${post.author}** in **r/${post.subreddit}** • ▲ ${post.displayScore} • 💬 ${post.displayComments}")
+        val stats = if (post.hasMetrics) " • ▲ ${post.displayScore} • 💬 ${post.displayComments}" else ""
+        appendLine("> Posted by **u/${post.author}** in **r/${post.subreddit}**$stats")
         val bodyText = post.cleanSelfText.orEmpty()
         if (bodyText.isNotBlank()) {
             appendLine()
@@ -95,7 +98,7 @@ fun PostShareDialog(
                 .clickable(enabled = false) {}
                 .padding(20.dp)
         ) {
-            Column {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 // Header
                 Row(
                     modifier = Modifier.fillMaxWidth(),

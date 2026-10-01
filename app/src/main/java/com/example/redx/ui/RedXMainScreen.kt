@@ -106,6 +106,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -196,6 +197,11 @@ fun RedXMainScreen(
     val tabletGridState = rememberLazyGridState()
     val scope = rememberCoroutineScope()
     var tabletLayoutMode by rememberSaveable { mutableStateOf(TabletLayoutMode.SPLIT) }
+
+    val windowConfig = LocalConfiguration.current
+    val isSplitPaneLayout = windowConfig.screenWidthDp >= 760 &&
+        windowConfig.screenHeightDp >= 480 &&
+        tabletLayoutMode == TabletLayoutMode.SPLIT
 
     fun resetFeedScroll() {
         scope.launch {
@@ -1020,7 +1026,12 @@ fun RedXMainScreen(
         SavedPostsSheet(
             savedPosts = savedPosts,
             onDismiss = { viewModel.setSavedPostsSheetOpen(false) },
-            onPostClick = { post -> viewModel.selectPost(post) },
+            onPostClick = { post ->
+                // In the tablet split view the reader is a pane *behind* this dialog, so the
+                // post would open invisibly; close the list first in that layout.
+                if (isSplitPaneLayout) viewModel.setSavedPostsSheetOpen(false)
+                viewModel.selectPost(post)
+            },
             onToggleSave = { post -> viewModel.toggleSave(post) }
         )
     }
@@ -1028,6 +1039,7 @@ fun RedXMainScreen(
     if (uiState.isSearchDialogOpen) {
         SearchDialog(
             currentSubreddit = uiState.activeSubreddit,
+            initialIncludeMature = userProfile.showMatureContent,
             onDismiss = { viewModel.setSearchDialogOpen(false) },
             onExecuteSearch = { query, inSub, mature, sort ->
                 viewModel.executeSearch(query, inSub, mature, sort)

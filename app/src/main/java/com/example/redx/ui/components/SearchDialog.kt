@@ -1,5 +1,7 @@
 package com.example.redx.ui.components
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -67,11 +69,13 @@ val POPULAR_SEARCH_TOPICS = listOf(
 fun SearchDialog(
     currentSubreddit: String,
     onDismiss: () -> Unit,
+    initialIncludeMature: Boolean = true,
     onExecuteSearch: (query: String, searchInSubreddit: Boolean, includeMature: Boolean, sort: FeedSort) -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var searchInCurrentSub by remember { mutableStateOf(false) }
-    var includeMature by remember { mutableStateOf(true) }
+    // Start from the user's mature-content preference instead of always opting in.
+    var includeMature by remember { mutableStateOf(initialIncludeMature) }
     var selectedSort by remember { mutableStateOf(FeedSort.RELEVANCE) }
 
     val canSearchCurrentSub = currentSubreddit.isNotBlank() &&
@@ -87,6 +91,7 @@ fun SearchDialog(
                 .clip(RoundedCornerShape(20.dp))
                 .border(1.dp, AmoledBorder, RoundedCornerShape(20.dp))
                 .background(AmoledSurface)
+                .verticalScroll(rememberScrollState())
                 .padding(20.dp)
         ) {
             // Header

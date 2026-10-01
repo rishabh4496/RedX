@@ -245,8 +245,22 @@ rather than on a device; see the commit's CI run for results.
 | D14 | Ad-hiding script removed every `[data-testid*="ad"]` element (header, thread, ...) | Anchored selectors |
 | D15 | Every feed video created an ExoPlayer / JS WebView on composition | `Autoplay videos in feed` setting; embeds are tap-to-play |
 
+### Second pass (same release)
+| # | Bug | Fix |
+|---|-----|-----|
+| P1 | Default Cards view: `RelaySwipeablePostCard` added a second 10dp margin and painted an elevated slab behind every card at rest | Drawer and backdrop only exist while swiped; no extra margin |
+| P2 | Feed cards never passed a gallery list, so the lightbox's multi-image navigation could never appear | ViewModel resolves the gallery from the post that owns the tapped URL |
+| P3 | Text-to-speech silently failed on posts over the engine's 4000-char limit and could report "playing" when the engine rejected input | `SpeechChunker` queues chunks; state follows real callbacks; device language preferred |
+| P4 | Search, Jump-to-subreddit, Account, Share, Multi-feed and Crosspost dialogs did not scroll (buttons unreachable in landscape / with the keyboard) | Scrollable content |
+| P5 | Search dialog always opted into mature results regardless of the user's setting | Seeded from the setting |
+| P6 | Invalid subreddit names were saved to "recent subreddits" and became the active feed before being rejected | Validated up front with a message |
+| P7 | Multi-feed picker accepted names the feed layer silently dropped | Same validator |
+| P8 | Saved list on tablet split view opened the post behind the dialog | Closes the list first in that layout |
+| P9 | Downloads: RedGifs embeds / HLS saved as junk files; Android 8-9 lacked permission for public Downloads | Clear message; app-scoped folder pre-Android 10 |
+| P10 | Read-later "open" could crash with no browser; share text showed `▲ – • 💬 –` | Guarded; metrics omitted when unknown |
+
 ### Added tests
-`AtomContentTest`, `RedditPostMetricsTest`, and an `AdBlockerTest` regression case.
+`AtomContentTest`, `RedditPostMetricsTest`, `SpeechChunkerTest`, and an `AdBlockerTest` regression case.
 
 ### Release artifacts
 The committed `redx*.apk` files are the previous v2.3.1 builds. They can only be
