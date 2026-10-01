@@ -1,5 +1,6 @@
 package com.example.redx.ui.components
 
+import androidx.compose.foundation.layout.heightIn
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
@@ -162,7 +163,7 @@ fun ReadLaterSheet(
                 }
             } else {
                 LazyColumn(
-                    modifier = Modifier.fillMaxWidth().height(460.dp),
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 460.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(items = queue, key = { it.postId }) { entry ->

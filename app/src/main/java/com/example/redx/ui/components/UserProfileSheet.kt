@@ -1,5 +1,6 @@
 package com.example.redx.ui.components
 
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -168,9 +169,10 @@ fun UserProfileSheet(
                 }
                 else -> {
                     LazyColumn(
+                        // heightIn(max): a fixed 480dp overflowed the sheet on short (landscape) screens.
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(480.dp),
+                            .heightIn(max = 480.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(items = posts, key = { it.id }) { post ->
@@ -244,7 +246,7 @@ private fun UserPostItem(
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "▲ ${post.score}   💬 ${post.numComments}",
+                text = if (post.hasMetrics) "▲ ${post.displayScore}   💬 ${post.displayComments}" else "Tap to open",
                 color = TextTertiary,
                 fontSize = 11.sp
             )

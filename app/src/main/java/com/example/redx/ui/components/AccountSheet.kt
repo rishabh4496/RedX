@@ -1,5 +1,14 @@
 package com.example.redx.ui.components
 
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.Image
@@ -62,6 +71,32 @@ fun AccountSheet(
     onSelectHomeFeed: () -> Unit,
     onSelectSubreddit: (String) -> Unit = {}
 ) {
+    var confirmLogout by remember { mutableStateOf(false) }
+
+    if (confirmLogout) {
+        AlertDialog(
+            onDismissRequest = { confirmLogout = false },
+            containerColor = AmoledSurface,
+            title = { Text("Log out of Reddit?", color = TextPrimary, fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "This clears your Reddit session on this device. Saved posts and settings stay.",
+                    color = TextSecondary,
+                    fontSize = 13.sp
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmLogout = false
+                    onLogout()
+                }) { Text("Log out", color = Color(0xFFEF5350), fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmLogout = false }) { Text("Cancel", color = TextSecondary) }
+            }
+        )
+    }
+
     Dialog(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
@@ -129,6 +164,18 @@ fun AccountSheet(
                             tint = RedditOrange,
                             modifier = Modifier.size(42.dp)
                         )
+                        // The avatar URL was fetched with the profile but never displayed.
+                        val avatarUrl = userProfile.avatarUrl
+                        if (userProfile.isLoggedIn && !avatarUrl.isNullOrBlank()) {
+                            AsyncImage(
+                                model = avatarUrl,
+                                contentDescription = "Your Reddit avatar",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(CircleShape)
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.width(14.dp))
@@ -173,30 +220,39 @@ fun AccountSheet(
             if (userProfile.isLoggedIn) {
                 Spacer(modifier = Modifier.height(12.dp))
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    AccountStat(
-                        label = "Link karma",
-                        value = userProfile.linkKarma.toString(),
-                        modifier = Modifier.weight(1f)
-                    )
-                    AccountStat(
-                        label = "Comment karma",
-                        value = userProfile.commentKarma.toString(),
-                        modifier = Modifier.weight(1f)
-                    )
-                    AccountStat(
-                        label = "Followers",
-                        value = userProfile.followersCount?.toString() ?: "—",
-                        modifier = Modifier.weight(1f)
-                    )
-                    AccountStat(
-                        label = "Following",
-                        value = userProfile.followingCount?.toString() ?: "—",
-                        modifier = Modifier.weight(1f)
-                    )
+                // Two rows of two: four across squeezed "Comment karma" into a wrapped label
+                // and left the boxes at different heights on phone widths.
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        AccountStat(
+                            label = "Link karma",
+                            value = userProfile.linkKarma.toString(),
+                            modifier = Modifier.weight(1f)
+                        )
+                        AccountStat(
+                            label = "Comment karma",
+                            value = userProfile.commentKarma.toString(),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        AccountStat(
+                            label = "Followers",
+                            value = userProfile.followersCount?.toString() ?: "—",
+                            modifier = Modifier.weight(1f)
+                        )
+                        AccountStat(
+                            label = "Following",
+                            value = userProfile.followingCount?.toString() ?: "—",
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -323,7 +379,7 @@ fun AccountSheet(
                 Spacer(modifier = Modifier.height(10.dp))
 
                 OutlinedButton(
-                    onClick = onLogout,
+                    onClick = { confirmLogout = true },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(10.dp)
                 ) {
