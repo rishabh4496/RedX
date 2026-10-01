@@ -93,8 +93,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -106,7 +107,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -136,6 +136,7 @@ import com.example.redx.ui.components.CommunityExplorerDialog
 import com.example.redx.ui.components.CustomSubredditDialog
 import com.example.redx.ui.components.FilterSettingsDialog
 import com.example.redx.ui.components.GalleryPostCard
+import com.example.redx.ui.components.LocalFeedVideosPaused
 import com.example.redx.ui.components.MediaLightboxDialog
 import com.example.redx.ui.components.PostCard
 import com.example.redx.ui.components.PostDetailContent
@@ -179,15 +180,15 @@ enum class TabletLayoutMode(val label: String) {
 fun RedXMainScreen(
     viewModel: RedXViewModel = viewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-    val userProfile by viewModel.userProfile.collectAsState()
-    val savedPosts by viewModel.savedPosts.collectAsState()
-    val favoriteSubreddits by viewModel.favoriteSubreddits.collectAsState()
-    val recentSubreddits by viewModel.recentSubreddits.collectAsState()
-    val blockedKeywords by viewModel.blockedKeywords.collectAsState()
-    val blockedDomains by viewModel.blockedDomains.collectAsState()
-    val isFilterEnabled by viewModel.isFilterEnabled.collectAsState()
-    val displayedSubreddits by viewModel.displayedSubreddits.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val userProfile by viewModel.userProfile.collectAsStateWithLifecycle()
+    val savedPosts by viewModel.savedPosts.collectAsStateWithLifecycle()
+    val favoriteSubreddits by viewModel.favoriteSubreddits.collectAsStateWithLifecycle()
+    val recentSubreddits by viewModel.recentSubreddits.collectAsStateWithLifecycle()
+    val blockedKeywords by viewModel.blockedKeywords.collectAsStateWithLifecycle()
+    val blockedDomains by viewModel.blockedDomains.collectAsStateWithLifecycle()
+    val isFilterEnabled by viewModel.isFilterEnabled.collectAsStateWithLifecycle()
+    val displayedSubreddits by viewModel.displayedSubreddits.collectAsStateWithLifecycle()
 
     val listState = rememberLazyListState()
     // Grid-based feeds (Gallery view and the tablet magazine grid) own their own scroll
@@ -197,11 +198,6 @@ fun RedXMainScreen(
     val tabletGridState = rememberLazyGridState()
     val scope = rememberCoroutineScope()
     var tabletLayoutMode by rememberSaveable { mutableStateOf(TabletLayoutMode.SPLIT) }
-
-    val windowConfig = LocalConfiguration.current
-    val isSplitPaneLayout = windowConfig.screenWidthDp >= 760 &&
-        windowConfig.screenHeightDp >= 480 &&
-        tabletLayoutMode == TabletLayoutMode.SPLIT
 
     fun resetFeedScroll() {
         scope.launch {
@@ -270,6 +266,8 @@ fun RedXMainScreen(
             viewModel.selectPost(null)
         }
 
+        // Feed videos pause while the lightbox or the modal reader covers the feed.
+        CompositionLocalProvider(LocalFeedVideosPaused provides (isLightboxOpen || showDetailModal)) {
         if (isTabletLandscape) {
             // ==========================================
             // TABLET LANDSCAPE UNIFIED REDESIGN
@@ -904,6 +902,7 @@ fun RedXMainScreen(
                 selectedPostId = null
             )
         }
+        }
 
         // Modal Sheet Reader for Phone mode OR Tablet Magazine mode
         val detailModalPost = uiState.selectedPost
@@ -1026,12 +1025,7 @@ fun RedXMainScreen(
         SavedPostsSheet(
             savedPosts = savedPosts,
             onDismiss = { viewModel.setSavedPostsSheetOpen(false) },
-            onPostClick = { post ->
-                // In the tablet split view the reader is a pane *behind* this dialog, so the
-                // post would open invisibly; close the list first in that layout.
-                if (isSplitPaneLayout) viewModel.setSavedPostsSheetOpen(false)
-                viewModel.selectPost(post)
-            },
+            onPostClick = { post -> viewModel.selectPost(post) },
             onToggleSave = { post -> viewModel.toggleSave(post) }
         )
     }
@@ -1100,7 +1094,7 @@ fun RedXMainScreen(
         )
     }
 
-    val readLaterQueue by viewModel.readLaterManager.queue.collectAsState()
+    val readLaterQueue by viewModel.readLaterManager.queue.collectAsStateWithLifecycle()
     if (uiState.isReadLaterSheetOpen) {
         ReadLaterSheet(
             queue = readLaterQueue,

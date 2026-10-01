@@ -255,9 +255,21 @@ rather than on a device; see the commit's CI run for results.
 | P5 | Search dialog always opted into mature results regardless of the user's setting | Seeded from the setting |
 | P6 | Invalid subreddit names were saved to "recent subreddits" and became the active feed before being rejected | Validated up front with a message |
 | P7 | Multi-feed picker accepted names the feed layer silently dropped | Same validator |
-| P8 | Saved list on tablet split view opened the post behind the dialog | Closes the list first in that layout |
 | P9 | Downloads: RedGifs embeds / HLS saved as junk files; Android 8-9 lacked permission for public Downloads | Clear message; app-scoped folder pre-Android 10 |
 | P10 | Read-later "open" could crash with no browser; share text showed `▲ – • 💬 –` | Guarded; metrics omitted when unknown |
+
+### Video player pass
+| # | Bug | Fix |
+|---|-----|-----|
+| V1 | Scrolling the feed with a finger on a video toggled play/pause on release and could trigger 2x speed | Gesture ignores movement/consumed events; cleanup in `finally` so 2x/scrub can't stick |
+| V2 | No audio-focus handling: unmuting didn't pause the user's music, headphone unplug kept playing | Audio attributes + focus only while unmuted; pause on becoming noisy |
+| V3 | Black box + spinner until first frame | Poster shown until the first frame renders (never for stream URLs) |
+| V4 | Feed videos kept playing under the lightbox / modal reader | `LocalFeedVideosPaused`; resumes only those that were playing |
+| V5 | RedGifs WebView kept running when the app was backgrounded | Paused/resumed with the lifecycle |
+| V6 | Inline previews decoded full-resolution streams | Capped to 720p for feed items |
+| V7 | Error text blamed "Reddit CDN" for any failure | Generic message |
+| V8 | Saved-posts filter field had a fixed 50dp height (clipped text) | `heightIn(min = 56dp)` |
+| V9 | Main screen collected flows while backgrounded | `collectAsStateWithLifecycle` |
 
 ### Added tests
 `AtomContentTest`, `RedditPostMetricsTest`, `SpeechChunkerTest`, and an `AdBlockerTest` regression case.
