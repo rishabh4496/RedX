@@ -78,15 +78,35 @@ jobs:
           cp "$APK" "redx-${RELEASE_TAG}.apk"
           cp "$APK" redx.apk
 
+      - name: Write release notes
+        run: |
+          cat > RELEASE_NOTES.md <<EOF
+          # RedX ${RELEASE_TAG} — UI & Data Bug-Fix Release
+
+          **Download \`redx.apk\` below: it is the complete, installable app** (the same file is also attached as \`redx-${RELEASE_TAG}.apk\`). It is signed with the same key as earlier releases, so it installs over an existing RedX.
+
+          ## What's new
+          - **System UI:** dark window theme (no white launch flash) and light status/nav icons on light-mode phones; the phone toolbar no longer draws under the status bar; phones in landscape no longer get the cramped tablet layout.
+          - **Feed:** pagination no longer retries forever on failure (retry button instead) and never appends unrelated search results; scroll-to-top works in Gallery and tablet grid views; edge-swipe no longer swallows touches.
+          - **Data:** RSS posts no longer show the subreddit as a fake flair or "submitted by..." as the post body; unknown scores show a dash instead of 0; the login session cookie is no longer dropped from authenticated requests; signed-out user profiles work.
+          - **Video:** scrolling over a video no longer pauses it or triggers 2x speed; audio focus and headphone-unplug handling; poster until the first frame; feed videos pause under the lightbox; RedGifs embeds are tap-to-play; new **Autoplay videos in feed** setting.
+          - **Cards & dialogs:** default Cards view margins fixed; gallery posts open as a multi-image lightbox; long posts can be read aloud; Search, Account, Share and other dialogs scroll; search respects the mature-content setting.
+
+          Full issue-by-issue list: [AUDIT.md](https://github.com/${GITHUB_REPOSITORY}/blob/${RELEASE_TAG}/AUDIT.md)
+          EOF
+
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" "redx-${RELEASE_TAG}.apk" redx.apk --clobber
+            gh release edit "$RELEASE_TAG" --notes-file RELEASE_NOTES.md --latest
           else
+            # --target pins a newly created tag to the commit that was built.
             gh release create "$RELEASE_TAG" "redx-${RELEASE_TAG}.apk" redx.apk \
+              --target "$GITHUB_SHA" \
               --title "RedX ${RELEASE_TAG}" \
-              --generate-notes \
+              --notes-file RELEASE_NOTES.md \
               --latest
           fi
