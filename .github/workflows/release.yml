@@ -99,24 +99,26 @@ jobs:
           if [ "$SIGNING_MODE" = "maintainer" ]; then
             SIGN_NOTE="It is signed with the same key as earlier releases, so it installs over an existing RedX."
           else
-            SIGN_NOTE="> **Signing note:** this build is signed with a **new key** (the original release key is not available to CI). It installs normally on a fresh device, but Android will not update an existing RedX installed from an older release: **uninstall the old RedX once, then install this APK.** Saved posts and settings are stored on-device and are not carried over."
+            SIGN_NOTE="> **Signing note:** this build is signed with a **new key** (the original release key is not available to CI). It installs normally on a fresh device, but Android will not update an existing RedX signed with a different key: **uninstall the old RedX once, then install this APK.** Saved posts and settings are stored on-device and are not carried over."
           fi
-          cat > RELEASE_NOTES.md <<EOF
-          # RedX ${RELEASE_TAG} — UI & Data Bug-Fix Release
-
-          **Download \`redx.apk\` below: it is the complete, installable app** (the same file is also attached as \`redx-${RELEASE_TAG}.apk\`).
-
-          ${SIGN_NOTE}
-
-          ## What's new
-          - **System UI:** dark window theme (no white launch flash) and light status/nav icons on light-mode phones; the phone toolbar no longer draws under the status bar; phones in landscape no longer get the cramped tablet layout.
-          - **Feed:** pagination no longer retries forever on failure (retry button instead) and never appends unrelated search results; scroll-to-top works in Gallery and tablet grid views; edge-swipe no longer swallows touches.
-          - **Data:** RSS posts no longer show the subreddit as a fake flair or "submitted by..." as the post body; unknown scores show a dash instead of 0; the login session cookie is no longer dropped from authenticated requests; signed-out user profiles work.
-          - **Video:** scrolling over a video no longer pauses it or triggers 2x speed; audio focus and headphone-unplug handling; poster until the first frame; feed videos pause under the lightbox; RedGifs embeds are tap-to-play; new **Autoplay videos in feed** setting.
-          - **Cards & dialogs:** default Cards view margins fixed; gallery posts open as a multi-image lightbox; long posts can be read aloud; Search, Account, Share and other dialogs scroll; search respects the mature-content setting.
-
-          Full issue-by-issue list: [AUDIT.md](https://github.com/${GITHUB_REPOSITORY}/blob/${RELEASE_TAG}/AUDIT.md)
-          EOF
+          # Per-version notes live in docs/release-notes/<tag>.md so each release describes
+          # its own changes instead of a hard-coded list.
+          NOTES_SRC="docs/release-notes/${RELEASE_TAG}.md"
+          {
+            echo "# RedX ${RELEASE_TAG}"
+            echo
+            echo "**Download \`redx.apk\` below: it is the complete, installable app** (the same file is also attached as \`redx-${RELEASE_TAG}.apk\`)."
+            echo
+            echo "${SIGN_NOTE}"
+            echo
+            if [ -f "$NOTES_SRC" ]; then
+              cat "$NOTES_SRC"
+            else
+              echo "See the commit history for the changes in this release."
+            fi
+            echo
+            echo "Full issue-by-issue list: [AUDIT.md](https://github.com/${GITHUB_REPOSITORY}/blob/${RELEASE_TAG}/AUDIT.md)"
+          } > RELEASE_NOTES.md
 
       - name: Publish GitHub Release
         env:
