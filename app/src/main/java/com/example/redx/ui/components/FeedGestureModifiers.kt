@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -31,6 +33,7 @@ fun Modifier.edgeSubredditSwipe(
     onSwipe: (direction: Int) -> Unit
 ): Modifier {
     val edgeWidthPx = with(LocalDensity.current) { EDGE_WIDTH.toPx() }
+    val currentOnSwipe by rememberUpdatedState(onSwipe)
     return pointerInput(enabled, edgeWidthPx) {
         if (!enabled) return@pointerInput
 
@@ -44,6 +47,8 @@ fun Modifier.edgeSubredditSwipe(
             var totalX = 0f
             var totalY = 0f
             var triggered = false
+            var claimed = false
+            val touchSlop = viewConfiguration.touchSlop
             val startedAtEdge = startX <= edgeWidthPx || startX >= size.width - edgeWidthPx
 
             while (true) {
@@ -54,11 +59,20 @@ fun Modifier.edgeSubredditSwipe(
                 totalY += position.y - previousPosition.y
                 previousPosition = position
 
-                if (!triggered && startedAtEdge &&
-                    abs(totalX) >= SWIPE_TRIGGER_PX && abs(totalX) > abs(totalY)
+                // Once a gesture that began at the edge is clearly horizontal, it belongs to
+                // the feed switcher: consume it in the Initial pass so the card underneath
+                // never starts its own swipe (which would also upvote/save the post). Taps and
+                // vertical scrolls are never claimed.
+                if (startedAtEdge && !claimed &&
+                    abs(totalX) > touchSlop && abs(totalX) > abs(totalY)
                 ) {
+                    claimed = true
+                }
+                if (claimed) change.consume()
+
+                if (!triggered && claimed && abs(totalX) >= SWIPE_TRIGGER_PX) {
                     triggered = true
-                    onSwipe(if (totalX < 0f) 1 else -1)
+                    currentOnSwipe(if (totalX < 0f) 1 else -1)
                 }
                 if (!change.pressed) break
             }

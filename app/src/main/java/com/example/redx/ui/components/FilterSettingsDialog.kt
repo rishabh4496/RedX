@@ -228,7 +228,7 @@ fun FilterSettingsDialog(
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = RedditOrange),
                         shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.height(50.dp)
+                        modifier = Modifier.height(56.dp)
                     ) {
                         Text("Add")
                     }
@@ -330,7 +330,7 @@ fun FilterSettingsDialog(
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = RedditOrange),
                         shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.height(50.dp)
+                        modifier = Modifier.height(56.dp)
                     ) {
                         Text("Add")
                     }
@@ -435,7 +435,7 @@ fun FilterSettingsDialog(
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = RedditOrange),
                         shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.height(50.dp)
+                        modifier = Modifier.height(56.dp)
                     ) {
                         Text("Add")
                     }

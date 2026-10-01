@@ -116,11 +116,14 @@ class ContentFilterManager(context: Context) {
      * subreddit stays visible on its own page.
      */
     fun shouldFilterPost(post: RedditPost, viewingSubreddit: String? = null): Boolean {
-        if (!_isFilterEnabled.value) return false
-
+        // Blocking a subreddit is an explicit, per-community choice, so it applies even when
+        // the keyword/domain engine is switched off. Otherwise "Block r/x" silently did nothing
+        // for anyone who had disabled the filter engine.
         if (ContentFilterRules.isSubredditBlocked(_blockedSubreddits.value, post.subreddit, viewingSubreddit)) {
             return true
         }
+
+        if (!_isFilterEnabled.value) return false
 
         // Check blocked domains
         val domain = normalizeDomain(post.domain) ?: UrlSafety.host(post.contentUrl)

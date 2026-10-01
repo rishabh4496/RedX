@@ -506,7 +506,7 @@ fun RedXMainScreen(
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = "${uiState.filteredPostCount} post(s) hidden by keyword/domain filters",
+                                        text = "${uiState.filteredPostCount} post(s) hidden by your filters",
                                         color = RedditOrange,
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.SemiBold
@@ -2150,7 +2150,7 @@ private fun FeedPanel(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "${uiState.filteredPostCount} post(s) hidden by keyword/domain filters",
+                                text = "${uiState.filteredPostCount} post(s) hidden by your filters",
                                 color = RedditOrange,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold

@@ -297,3 +297,11 @@ opening the post behind it). A tap on any inline feed video now opens the full-s
 player, the poster state does the same, and the tap is consumed so the card underneath does
 not react. The ViewModel also treats any post's own video URL as video, so the lightbox opens
 the player even when the URL has no telltale extension.
+
+### Pre-release review (v2.5.0)
+| Bug | Fix |
+|---|---|
+| *Block r/x* did nothing (but reported success) when the keyword/domain filter engine was switched off | Blocked subreddits apply independently of the engine toggle |
+| A horizontal swipe starting at the screen edge switched feeds **and** triggered the card's own swipe (upvote/save) | The edge gesture claims (consumes) clearly-horizontal edge swipes in the Initial pass; taps and vertical scrolls are untouched |
+| Filter banner said "hidden by keyword/domain filters" although it also counts blocked subreddits | "hidden by your filters" |
+| Content-filter *Add* buttons were 50dp next to 56dp text fields | 56dp |
