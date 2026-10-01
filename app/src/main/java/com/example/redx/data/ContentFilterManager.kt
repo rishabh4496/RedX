@@ -6,6 +6,7 @@ import androidx.core.net.toUri
 import android.content.SharedPreferences
 import android.net.Uri
 import com.example.redx.model.RedditPost
+import com.example.redx.util.ContentFilterRules
 import com.example.redx.util.UrlSafety
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -24,6 +25,9 @@ class ContentFilterManager(context: Context) {
     private val _blockedDomains = MutableStateFlow<List<String>>(loadList(KEY_BLOCKED_DOMAINS))
     val blockedDomains: StateFlow<List<String>> = _blockedDomains.asStateFlow()
 
+    private val _blockedSubreddits = MutableStateFlow<List<String>>(loadList(KEY_BLOCKED_SUBREDDITS))
+    val blockedSubreddits: StateFlow<List<String>> = _blockedSubreddits.asStateFlow()
+
     private val _isFilterEnabled = MutableStateFlow(prefs.getBoolean(KEY_FILTER_ENABLED, true))
     val isFilterEnabled: StateFlow<Boolean> = _isFilterEnabled.asStateFlow()
 
@@ -34,7 +38,11 @@ class ContentFilterManager(context: Context) {
             val array = JSONArray(jsonString)
             for (i in 0 until array.length()) {
                 val rawItem = array.getString(i).trim().lowercase(Locale.ROOT)
-                val item = if (key == KEY_BLOCKED_DOMAINS) normalizeDomain(rawItem) else rawItem
+                val item = when (key) {
+                    KEY_BLOCKED_DOMAINS -> normalizeDomain(rawItem)
+                    KEY_BLOCKED_SUBREDDITS -> ContentFilterRules.normalizeSubredditName(rawItem)
+                    else -> rawItem
+                }
                 if (!item.isNullOrBlank() && !list.contains(item)) {
                     list.add(item)
                 }
@@ -83,13 +91,36 @@ class ContentFilterManager(context: Context) {
         persistList(KEY_BLOCKED_DOMAINS, updated)
     }
 
+    fun addBlockedSubreddit(subreddit: String) {
+        val clean = ContentFilterRules.normalizeSubredditName(subreddit) ?: return
+        if (_blockedSubreddits.value.contains(clean)) return
+        val updated = _blockedSubreddits.value + clean
+        _blockedSubreddits.value = updated
+        persistList(KEY_BLOCKED_SUBREDDITS, updated)
+    }
+
+    fun removeBlockedSubreddit(subreddit: String) {
+        val clean = ContentFilterRules.normalizeSubredditName(subreddit) ?: return
+        val updated = _blockedSubreddits.value.filter { it != clean }
+        _blockedSubreddits.value = updated
+        persistList(KEY_BLOCKED_SUBREDDITS, updated)
+    }
+
     fun toggleFilterEnabled(enabled: Boolean) {
         _isFilterEnabled.value = enabled
         prefs.edit { putBoolean(KEY_FILTER_ENABLED, enabled) }
     }
 
-    fun shouldFilterPost(post: RedditPost): Boolean {
+    /**
+     * @param viewingSubreddit the subreddit the user is currently browsing, if any; a blocked
+     * subreddit stays visible on its own page.
+     */
+    fun shouldFilterPost(post: RedditPost, viewingSubreddit: String? = null): Boolean {
         if (!_isFilterEnabled.value) return false
+
+        if (ContentFilterRules.isSubredditBlocked(_blockedSubreddits.value, post.subreddit, viewingSubreddit)) {
+            return true
+        }
 
         // Check blocked domains
         val domain = normalizeDomain(post.domain) ?: UrlSafety.host(post.contentUrl)
@@ -133,6 +164,7 @@ class ContentFilterManager(context: Context) {
     companion object {
         private const val KEY_BLOCKED_KEYWORDS = "blocked_keywords"
         private const val KEY_BLOCKED_DOMAINS = "blocked_domains"
+        private const val KEY_BLOCKED_SUBREDDITS = "blocked_subreddits"
         private const val KEY_FILTER_ENABLED = "filter_enabled"
     }
 }

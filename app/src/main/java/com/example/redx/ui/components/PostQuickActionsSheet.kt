@@ -76,7 +76,9 @@ fun PostQuickActionsSheet(
     onAddFilterDomain: (String) -> Unit,
     onAddToReadLater: ((RedditPost) -> Unit)? = null,
     onCrosspost: ((RedditPost) -> Unit)? = null,
-    onViewAuthor: ((String) -> Unit)? = null
+    onViewAuthor: ((String) -> Unit)? = null,
+    onHidePost: ((RedditPost) -> Unit)? = null,
+    onBlockSubreddit: ((String) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -236,6 +238,34 @@ fun PostQuickActionsSheet(
                             iconTint = RedditOrange,
                             onClick = {
                                 onViewAuthor.invoke(post.author)
+                                onDismiss()
+                            }
+                        )
+                    }
+
+                    // 4e. Hide this post
+                    if (onHidePost != null) {
+                        ActionRow(
+                            icon = Icons.Default.VisibilityOff,
+                            title = "Hide this post",
+                            subtitle = "Remove it from your feeds (undo from Content Filters)",
+                            iconTint = TextSecondary,
+                            onClick = {
+                                onHidePost.invoke(post)
+                                onDismiss()
+                            }
+                        )
+                    }
+
+                    // 4f. Block the subreddit
+                    if (onBlockSubreddit != null && post.subreddit.isNotBlank()) {
+                        ActionRow(
+                            icon = Icons.Default.Block,
+                            title = "Block r/${post.subreddit}",
+                            subtitle = "Hide everything from this community in other feeds",
+                            iconTint = NsfwRed,
+                            onClick = {
+                                onBlockSubreddit.invoke(post.subreddit)
                                 onDismiss()
                             }
                         )

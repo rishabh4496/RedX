@@ -279,3 +279,13 @@ The committed `redx*.apk` files are the previous v2.3.1 builds. They can only be
 re-signed with the maintainer's keystore, so they are produced by CI (set the
 `REDX_KEYSTORE_BASE64`, `REDX_KEYSTORE_PASSWORD`, `REDX_KEY_ALIAS`, `REDX_KEY_PASSWORD`
 secrets) or locally via `keystore.properties`.
+
+
+---
+
+## v2.5.0 — features and third review pass
+
+New in this release: Top time range, Hide post, Block subreddit, Recent searches and
+Remember-last-feed (see README). Pure logic is covered by `RecentSearchesTest`,
+`ContentFilterRulesTest` and new `RedditFeedServiceTest` cases (time-range URLs and
+per-range cache keys).

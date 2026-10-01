@@ -3,6 +3,7 @@ package com.example.redx.network
 import android.text.Html
 import com.example.redx.model.FeedSort
 import com.example.redx.model.RedditPost
+import com.example.redx.model.TopTimeRange
 import com.example.redx.util.RedditInputValidator
 import com.example.redx.util.UrlSafety
 import kotlinx.coroutines.Dispatchers
@@ -83,10 +84,21 @@ object RedditFeedService {
     )
     private val feedCache = ConcurrentHashMap<String, CacheEntry>()
 
-    fun getCachedFeed(subreddit: String, sort: FeedSort, includeMature: Boolean): List<RedditPost>? {
+    /** "Top / this week" and "Top / today" are different feeds and must not share a cache slot. */
+    internal fun cacheKey(cleanSub: String, safeSort: FeedSort, includeMature: Boolean, timeRange: TopTimeRange): String {
+        val range = if (safeSort == FeedSort.TOP) timeRange.apiValue else "-"
+        return "$cleanSub:${safeSort.apiValue}:$range:$includeMature"
+    }
+
+    fun getCachedFeed(
+        subreddit: String,
+        sort: FeedSort,
+        includeMature: Boolean,
+        timeRange: TopTimeRange = TopTimeRange.DEFAULT
+    ): List<RedditPost>? {
         val cleanSub = normalizeSubredditTarget(subreddit) ?: return null
         val safeSort = if (sort == FeedSort.RELEVANCE) FeedSort.HOT else sort
-        val key = "$cleanSub:${safeSort.apiValue}:$includeMature"
+        val key = cacheKey(cleanSub, safeSort, includeMature, timeRange)
         val entry = feedCache[key] ?: return null
         // Cache valid for 3 minutes
         if (System.currentTimeMillis() - entry.timestamp < 3 * 60 * 1000) {
@@ -104,15 +116,16 @@ object RedditFeedService {
         cookieHeader: String? = null,
         after: String? = null,
         includeMature: Boolean = true,
-        forceRefresh: Boolean = false
+        forceRefresh: Boolean = false,
+        timeRange: TopTimeRange = TopTimeRange.DEFAULT
     ): Result<List<RedditPost>> = withContext(Dispatchers.IO) {
         val cleanSub = normalizeSubredditTarget(subreddit)
             ?: return@withContext Result.failure(IllegalArgumentException("Invalid subreddit name"))
         val safeSort = if (sort == FeedSort.RELEVANCE) FeedSort.HOT else sort
-        val cacheKey = "$cleanSub:${safeSort.apiValue}:$includeMature"
+        val feedKey = cacheKey(cleanSub, safeSort, includeMature, timeRange)
 
         if (after == null && !forceRefresh) {
-            val cached = feedCache[cacheKey]
+            val cached = feedCache[feedKey]
             if (cached != null && System.currentTimeMillis() - cached.timestamp < 3 * 60 * 1000) {
                 return@withContext Result.success(cached.posts)
             }
@@ -126,26 +139,26 @@ object RedditFeedService {
         // are rejected with 403 by Reddit, which quickly trips anti-bot IP rate-limiting.
         val hasSessionCookie = !cookieHeader.isNullOrBlank() && cookieHeader.contains("reddit_session", ignoreCase = true)
         if (hasSessionCookie) {
-            val jsonUrl = buildJsonFeedUrl(cleanSub, safeSort, after)
+            val jsonUrl = buildJsonFeedUrl(cleanSub, safeSort, after, timeRange)
             val jsonPosts = executeJsonRequest(jsonUrl, cleanSub, cookieHeader, includeMature)
                 .getOrNull()
                 ?.takeIf { it.isNotEmpty() }
             if (jsonPosts != null) {
                 if (after == null) {
-                    feedCache[cacheKey] = CacheEntry(jsonPosts, System.currentTimeMillis())
+                    feedCache[feedKey] = CacheEntry(jsonPosts, System.currentTimeMillis())
                 }
                 return@withContext Result.success(jsonPosts)
             }
         }
 
         // Standard RSS/Atom feed is Reddit's publicly supported unauthenticated syndication format.
-        val standardUrl = buildFeedUrl(cleanSub, safeSort) + afterParam
+        val standardUrl = buildFeedUrl(cleanSub, safeSort, timeRange) + afterParam
         val firstAttempt = executeRequest(standardUrl, cleanSub, cookieHeader, includeMature)
 
         val firstPosts = firstAttempt.getOrNull()?.takeIf { it.isNotEmpty() }
         if (firstPosts != null) {
             if (after == null) {
-                feedCache[cacheKey] = CacheEntry(firstPosts, System.currentTimeMillis())
+                feedCache[feedKey] = CacheEntry(firstPosts, System.currentTimeMillis())
             }
             return@withContext Result.success(firstPosts)
         }
@@ -155,7 +168,7 @@ object RedditFeedService {
         val firstError = firstAttempt.exceptionOrNull()
         if (firstError?.message?.contains("429") == true) {
             if (after == null) {
-                feedCache[cacheKey]?.let { cached ->
+                feedCache[feedKey]?.let { cached ->
                     return@withContext Result.success(cached.posts)
                 }
             }
@@ -164,7 +177,7 @@ object RedditFeedService {
 
         // If network request failed but we have a cached copy, return cached posts gracefully
         if (after == null) {
-            feedCache[cacheKey]?.let { cached ->
+            feedCache[feedKey]?.let { cached ->
                 return@withContext Result.success(cached.posts)
             }
         }
@@ -183,10 +196,11 @@ object RedditFeedService {
             FeedSort.RELEVANCE -> "relevance"
             else -> safeSort.apiValue
         }
+        val timeParam = if (safeSort == FeedSort.TOP) "&t=${timeRange.apiValue}" else ""
         val fallbackSearchUrl = if (cleanSub.isEmpty() || cleanSub.equals("home", true) || cleanSub.equals("popular", true) || cleanSub.equals("all", true)) {
-            "https://www.reddit.com/search.rss?q=*&include_over_18=${if (includeMature) "on" else "off"}&sort=$searchSort&limit=50$afterParam"
+            "https://www.reddit.com/search.rss?q=*&include_over_18=${if (includeMature) "on" else "off"}&sort=$searchSort&limit=50$timeParam$afterParam"
         } else {
-            "https://www.reddit.com/r/$cleanSub/search.rss?q=*&restrict_sr=on&include_over_18=${if (includeMature) "on" else "off"}&sort=$searchSort&limit=50$afterParam"
+            "https://www.reddit.com/r/$cleanSub/search.rss?q=*&restrict_sr=on&include_over_18=${if (includeMature) "on" else "off"}&sort=$searchSort&limit=50$timeParam$afterParam"
         }
 
         val searchPosts = executeRequest(fallbackSearchUrl, cleanSub, cookieHeader, includeMature)
@@ -194,7 +208,7 @@ object RedditFeedService {
             ?.takeIf { it.isNotEmpty() }
         if (searchPosts != null) {
             if (after == null) {
-                feedCache[cacheKey] = CacheEntry(searchPosts, System.currentTimeMillis())
+                feedCache[feedKey] = CacheEntry(searchPosts, System.currentTimeMillis())
             }
             return@withContext Result.success(searchPosts)
         }
@@ -337,22 +351,28 @@ object RedditFeedService {
         }
     }
 
-    internal fun buildFeedUrl(cleanSub: String, sort: FeedSort): String {
+    internal fun buildFeedUrl(cleanSub: String, sort: FeedSort, timeRange: TopTimeRange? = null): String {
         val validSort = if (sort == FeedSort.RELEVANCE) FeedSort.HOT else sort
         val sortSegment = if (validSort == FeedSort.HOT) "" else "${validSort.apiValue}/"
+        val timeParam = if (validSort == FeedSort.TOP && timeRange != null) "&t=${timeRange.apiValue}" else ""
         return when {
             cleanSub.isEmpty() || cleanSub.equals("home", ignoreCase = true) ->
-                "https://www.reddit.com/${sortSegment}.rss?limit=50"
+                "https://www.reddit.com/${sortSegment}.rss?limit=50$timeParam"
             cleanSub.equals("popular", ignoreCase = true) ->
-                "https://www.reddit.com/r/popular/${sortSegment}.rss?limit=50"
+                "https://www.reddit.com/r/popular/${sortSegment}.rss?limit=50$timeParam"
             cleanSub.equals("all", ignoreCase = true) ->
-                "https://www.reddit.com/r/all/${sortSegment}.rss?limit=50"
+                "https://www.reddit.com/r/all/${sortSegment}.rss?limit=50$timeParam"
             else ->
-                "https://www.reddit.com/r/$cleanSub/${sortSegment}.rss?limit=50"
+                "https://www.reddit.com/r/$cleanSub/${sortSegment}.rss?limit=50$timeParam"
         }
     }
 
-    internal fun buildJsonFeedUrl(cleanSub: String, sort: FeedSort, after: String? = null): String {
+    internal fun buildJsonFeedUrl(
+        cleanSub: String,
+        sort: FeedSort,
+        after: String? = null,
+        timeRange: TopTimeRange? = null
+    ): String {
         val sortSegment = when (sort) {
             FeedSort.HOT -> "hot"
             FeedSort.NEW -> "new"
@@ -373,7 +393,8 @@ object RedditFeedService {
         val afterParam = after?.trim()?.takeIf { it.isNotBlank() }
             ?.let { "&after=${URLEncoder.encode(it, "UTF-8")}" }
             .orEmpty()
-        return "$base?limit=50&raw_json=1$afterParam"
+        val timeParam = if (sort == FeedSort.TOP && timeRange != null) "&t=${timeRange.apiValue}" else ""
+        return "$base?limit=50&raw_json=1$timeParam$afterParam"
     }
 
     internal fun buildJsonSearchUrl(subreddit: String?, query: String, sort: FeedSort): String {

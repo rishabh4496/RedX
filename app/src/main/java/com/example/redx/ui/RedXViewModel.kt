@@ -7,6 +7,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.redx.auth.RedditAccountManager
 import com.example.redx.data.ContentFilterManager
+import com.example.redx.data.HiddenPostsManager
+import com.example.redx.data.RecentSearchesManager
 import com.example.redx.data.ReadLaterManager
 import com.example.redx.data.ReadPostsManager
 import com.example.redx.data.RecentSubredditsManager
@@ -17,6 +19,7 @@ import com.example.redx.model.FeedViewMode
 import com.example.redx.model.FontScale
 import com.example.redx.model.RedditPost
 import com.example.redx.model.SearchContentType
+import com.example.redx.model.TopTimeRange
 import com.example.redx.model.UserProfile
 import com.example.redx.network.RedditFeedService
 import com.example.redx.network.RedditPostActionService
@@ -39,6 +42,7 @@ import kotlinx.coroutines.Job
 data class RedXUiState(
     val activeSubreddit: String = "popular",
     val activeSort: FeedSort = FeedSort.HOT,
+    val topTimeRange: TopTimeRange = TopTimeRange.DEFAULT,
     val posts: List<RedditPost> = emptyList(),
     val isLoading: Boolean = false,
     val isLoadingMore: Boolean = false,
@@ -99,6 +103,8 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
     val contentFilterManager = ContentFilterManager(application)
     val recentSubredditsManager = RecentSubredditsManager(application)
     val readLaterManager = ReadLaterManager(application)
+    val hiddenPostsManager = HiddenPostsManager(application)
+    val recentSearchesManager = RecentSearchesManager(application)
 
     val userProfile: StateFlow<UserProfile> = accountManager.userProfile
     val savedPosts: StateFlow<List<RedditPost>> = savedPostsManager.savedPosts
@@ -108,6 +114,9 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
     val blockedKeywords: StateFlow<List<String>> = contentFilterManager.blockedKeywords
     val blockedDomains: StateFlow<List<String>> = contentFilterManager.blockedDomains
     val isFilterEnabled: StateFlow<Boolean> = contentFilterManager.isFilterEnabled
+    val blockedSubreddits: StateFlow<List<String>> = contentFilterManager.blockedSubreddits
+    val hiddenPostIds: StateFlow<Set<String>> = hiddenPostsManager.hiddenIds
+    val recentSearches: StateFlow<List<String>> = recentSearchesManager.recentSearches
 
     val displayedSubreddits: StateFlow<List<String>> = combine(
         userProfile,
@@ -138,9 +147,29 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
         }
     )
 
+    /** Reopens the app on the feed and sort the user left, instead of always starting at Popular/Hot. */
+    private fun loadSavedFeed(): Pair<String, FeedSort> {
+        val loggedIn = accountManager.userProfile.value.isLoggedIn
+        val defaultSub = if (loggedIn) "home" else "popular"
+        val sub = prefs.getString(KEY_LAST_SUBREDDIT, null)
+            ?.let(RedditInputValidator::normalizeSubreddit)
+            // "home" is the personal front page; it is meaningless for a signed-out user.
+            ?.takeIf { loggedIn || !it.equals("home", ignoreCase = true) }
+            ?: defaultSub
+        val sort = prefs.getString(KEY_LAST_SORT, null)
+            ?.let { name -> runCatching { FeedSort.valueOf(name) }.getOrNull() }
+            ?.takeIf { it != FeedSort.RELEVANCE }
+            ?: FeedSort.HOT
+        return sub to sort
+    }
+
+    private val savedFeed = loadSavedFeed()
+
     private val _uiState = MutableStateFlow(
         RedXUiState(
-            activeSubreddit = if (accountManager.userProfile.value.isLoggedIn) "home" else "popular",
+            activeSubreddit = savedFeed.first,
+            activeSort = savedFeed.second,
+            topTimeRange = TopTimeRange.fromName(prefs.getString(KEY_TOP_TIME_RANGE, null)),
             viewMode = prefs.getString("key_view_mode", null)?.let { name ->
                 try { FeedViewMode.valueOf(name) } catch (e: Exception) { FeedViewMode.CARDS }
             } ?: FeedViewMode.CARDS,
@@ -184,12 +213,10 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     init {
-        val isAlreadyLoggedIn = accountManager.userProfile.value.isLoggedIn
-        val initialSub = if (isAlreadyLoggedIn) "home" else "popular"
         viewModelScope.launch {
             accountManager.refreshAuthenticatedAccount()
         }
-        loadFeed(subreddit = initialSub, sort = FeedSort.HOT)
+        loadFeed(subreddit = _uiState.value.activeSubreddit, sort = _uiState.value.activeSort)
     }
 
     /**
@@ -206,9 +233,13 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun filterAndMapPosts(rawList: List<RedditPost>): Pair<List<RedditPost>, Int> {
-        val totalCount = rawList.size
-        val allowedPosts = rawList.filter { !contentFilterManager.shouldFilterPost(it) }
-        val filteredOutCount = totalCount - allowedPosts.size
+        // Posts the user hid by hand are removed silently; only keyword/domain/subreddit
+        // filter hits are counted in the "hidden by filters" banner.
+        val visible = rawList.filter { !hiddenPostsManager.isHidden(it.id) }
+        val viewingSubreddit = _uiState.value.activeSubreddit
+            .takeIf { !_uiState.value.isSearchActive && !it.contains("+") }
+        val allowedPosts = visible.filter { !contentFilterManager.shouldFilterPost(it, viewingSubreddit) }
+        val filteredOutCount = visible.size - allowedPosts.size
 
         var displayList = allowedPosts
 
@@ -331,7 +362,14 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         val includeMature = accountManager.userProfile.value.showMatureContent
-        val cached = if (!forceRefresh) RedditFeedService.getCachedFeed(targetSub, targetSort, includeMature) else null
+        val timeRange = _uiState.value.topTimeRange
+        if (!targetSub.contains("+")) {
+            prefs.edit {
+                putString(KEY_LAST_SUBREDDIT, targetSub)
+                putString(KEY_LAST_SORT, targetSort.name)
+            }
+        }
+        val cached = if (!forceRefresh) RedditFeedService.getCachedFeed(targetSub, targetSort, includeMature, timeRange) else null
 
         if (cached != null && cached.isNotEmpty()) {
             rawFetchedPosts = cached
@@ -388,7 +426,8 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
                 sort = targetSort,
                 cookieHeader = cookieHeader,
                 includeMature = includeMature,
-                forceRefresh = forceRefresh
+                forceRefresh = forceRefresh,
+                timeRange = timeRange
             )
 
             if (requestId != requestGeneration) return@launch
@@ -471,7 +510,8 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
                 sort = targetSort,
                 cookieHeader = cookieHeader,
                 after = "t3_$afterId",
-                includeMature = includeMature
+                includeMature = includeMature,
+                timeRange = _uiState.value.topTimeRange
             )
 
             if (requestId != requestGeneration) return@launch
@@ -539,6 +579,7 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
     ) {
         val cleanQuery = query.trim()
         if (cleanQuery.isBlank()) return
+        recentSearchesManager.record(cleanQuery)
         val requestId = ++requestGeneration
         val targetSub = if (searchInSubreddit) _uiState.value.activeSubreddit else null
 
@@ -876,6 +917,49 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
         setViewMode(nextMode)
     }
 
+    fun setTopTimeRange(range: TopTimeRange) {
+        if (_uiState.value.topTimeRange == range) return
+        prefs.edit { putString(KEY_TOP_TIME_RANGE, range.name) }
+        _uiState.value = _uiState.value.copy(topTimeRange = range)
+        if (_uiState.value.activeSort == FeedSort.TOP && !_uiState.value.isSearchActive) {
+            loadFeed()
+        }
+    }
+
+    // ── Hide post / block subreddit ──────────────────────────────────────────
+
+    fun hidePost(post: RedditPost) {
+        hiddenPostsManager.hide(post.id)
+        if (_uiState.value.selectedPost?.id == post.id) selectPost(null)
+        refreshActivePostList()
+        showTransientMessage("Post hidden")
+    }
+
+    fun unhideAllPosts() {
+        hiddenPostsManager.clearAll()
+        refreshActivePostList()
+    }
+
+    fun blockSubreddit(subreddit: String) {
+        contentFilterManager.addBlockedSubreddit(subreddit)
+        refreshActivePostList()
+        showTransientMessage("r/${subreddit.removePrefix("r/")} blocked. Manage it under Content Filters")
+    }
+
+    fun addFilterSubreddit(subreddit: String) {
+        contentFilterManager.addBlockedSubreddit(subreddit)
+        refreshActivePostList()
+    }
+
+    fun removeFilterSubreddit(subreddit: String) {
+        contentFilterManager.removeBlockedSubreddit(subreddit)
+        refreshActivePostList()
+    }
+
+    fun removeRecentSearch(query: String) = recentSearchesManager.remove(query)
+
+    fun clearRecentSearches() = recentSearchesManager.clear()
+
     fun setViewStylePickerOpen(isOpen: Boolean) {
         _uiState.value = _uiState.value.copy(isViewStylePickerOpen = isOpen)
     }
@@ -1126,5 +1210,8 @@ class RedXViewModel(application: Application) : AndroidViewModel(application) {
 
     private companion object {
         const val TRANSIENT_MESSAGE_MILLIS = 5_000L
+        const val KEY_LAST_SUBREDDIT = "key_last_subreddit"
+        const val KEY_LAST_SORT = "key_last_sort"
+        const val KEY_TOP_TIME_RANGE = "key_top_time_range"
     }
 }

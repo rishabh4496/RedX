@@ -70,6 +70,9 @@ fun SearchDialog(
     currentSubreddit: String,
     onDismiss: () -> Unit,
     initialIncludeMature: Boolean = true,
+    recentSearches: List<String> = emptyList(),
+    onRemoveRecentSearch: (String) -> Unit = {},
+    onClearRecentSearches: () -> Unit = {},
     onExecuteSearch: (query: String, searchInSubreddit: Boolean, includeMature: Boolean, sort: FeedSort) -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
@@ -272,6 +275,74 @@ fun SearchDialog(
             }
 
             Spacer(modifier = Modifier.height(14.dp))
+
+            // Recent searches (most recent first)
+            if (recentSearches.isNotEmpty()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Recent Searches",
+                        color = TextSecondary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = "Clear",
+                        color = RedditOrange,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable { onClearRecentSearches() }
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    recentSearches.forEach { recent ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(RedditOrange.copy(alpha = 0.12f))
+                                .border(1.dp, RedditOrange.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
+                                .clickable { searchQuery = recent }
+                                .padding(start = 10.dp, end = 4.dp, top = 3.dp, bottom = 3.dp)
+                        ) {
+                            Text(
+                                text = recent,
+                                color = TextPrimary,
+                                fontSize = 11.sp,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                modifier = Modifier.widthIn(max = 200.dp)
+                            )
+                            IconButton(
+                                onClick = { onRemoveRecentSearch(recent) },
+                                modifier = Modifier.size(22.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Remove \"$recent\" from recent searches",
+                                    tint = TextSecondary,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+            }
 
             // Trending Searches
             Text(

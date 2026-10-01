@@ -150,4 +150,36 @@ class RedditFeedServiceTest {
 
         assertTrue(cookies == "reddit_session=session123")
     }
+
+    @Test
+    fun topSortCarriesTheTimeRange() {
+        assertEquals(
+            "https://www.reddit.com/r/android/top/.rss?limit=50&t=week",
+            RedditFeedService.buildFeedUrl("android", FeedSort.TOP, com.example.redx.model.TopTimeRange.WEEK)
+        )
+        assertEquals(
+            "https://www.reddit.com/r/android/top.json?limit=50&raw_json=1&t=month&after=t3_x",
+            RedditFeedService.buildJsonFeedUrl("android", FeedSort.TOP, "t3_x", com.example.redx.model.TopTimeRange.MONTH)
+        )
+    }
+
+    @Test
+    fun timeRangeIsIgnoredForNonTopSorts() {
+        assertEquals(
+            "https://www.reddit.com/r/android/new/.rss?limit=50",
+            RedditFeedService.buildFeedUrl("android", FeedSort.NEW, com.example.redx.model.TopTimeRange.YEAR)
+        )
+    }
+
+    @Test
+    fun cacheKeysSeparateTopTimeRanges() {
+        val week = RedditFeedService.cacheKey("android", FeedSort.TOP, true, com.example.redx.model.TopTimeRange.WEEK)
+        val day = RedditFeedService.cacheKey("android", FeedSort.TOP, true, com.example.redx.model.TopTimeRange.DAY)
+        assertTrue(week != day)
+        // Non-top sorts must share one slot regardless of the selected range.
+        assertEquals(
+            RedditFeedService.cacheKey("android", FeedSort.NEW, true, com.example.redx.model.TopTimeRange.WEEK),
+            RedditFeedService.cacheKey("android", FeedSort.NEW, true, com.example.redx.model.TopTimeRange.DAY)
+        )
+    }
 }

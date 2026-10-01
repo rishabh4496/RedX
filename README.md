@@ -28,6 +28,18 @@ Built using **100% Jetpack Compose**, Material 3 design tokens, hardware-acceler
 
 ---
 
+## ✨ What's New in v2.5.0 — Feed Control Release
+
+| Feature | What it does |
+|:---|:---|
+| **Top time range** | Sorting by *Top* now shows Hour / Today / Week / Month / Year / All time chips (Reddit's `t=` window). Each range has its own cache. |
+| **Hide post** | Quick-actions (⋮) → *Hide this post* removes it from every feed; *Unhide all* lives in Content Filters. |
+| **Block subreddit** | Quick-actions → *Block r/…* hides a community everywhere except when you open it yourself; manage the list under Content Filters. |
+| **Recent searches** | The search dialog remembers your last 8 queries (tap to reuse, ✕ to remove, *Clear* to reset). |
+| **Remember last feed** | RedX reopens on the subreddit and sort you left, not always Popular/Hot. |
+
+---
+
 ## 🩹 What's New in v2.4.0 — UI & Data Bug-Fix Release
 
 Second audit pass focused on visible UI bugs and feed/data correctness. Details in

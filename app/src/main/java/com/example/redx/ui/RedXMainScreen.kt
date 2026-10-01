@@ -189,6 +189,9 @@ fun RedXMainScreen(
     val blockedDomains by viewModel.blockedDomains.collectAsStateWithLifecycle()
     val isFilterEnabled by viewModel.isFilterEnabled.collectAsStateWithLifecycle()
     val displayedSubreddits by viewModel.displayedSubreddits.collectAsStateWithLifecycle()
+    val blockedSubreddits by viewModel.blockedSubreddits.collectAsStateWithLifecycle()
+    val hiddenPostIds by viewModel.hiddenPostIds.collectAsStateWithLifecycle()
+    val recentSearches by viewModel.recentSearches.collectAsStateWithLifecycle()
 
     val listState = rememberLazyListState()
     // Grid-based feeds (Gallery view and the tablet magazine grid) own their own scroll
@@ -644,6 +647,11 @@ fun RedXMainScreen(
                             onSortSelected = { sort ->
                                 viewModel.loadFeed(sort = sort)
                                 resetFeedScroll()
+                            },
+                            topTimeRange = uiState.topTimeRange.takeUnless { uiState.isSearchActive },
+                            onTopTimeRangeSelected = { range ->
+                                viewModel.setTopTimeRange(range)
+                                resetFeedScroll()
                             }
                         )
 
@@ -889,6 +897,10 @@ fun RedXMainScreen(
                     viewModel.loadFeed(sort = sort)
                     resetFeedScroll()
                 },
+                onSelectTopTimeRange = { range ->
+                    viewModel.setTopTimeRange(range)
+                    resetFeedScroll()
+                },
                 onClearSearch = { viewModel.clearSearch() },
                 onRevertFeed = { sub, sort -> viewModel.clearSearch(sub, sort) },
                 onSearchContentTypeSelected = { viewModel.setSearchContentType(it) },
@@ -942,7 +954,9 @@ fun RedXMainScreen(
             onAddFilterDomain = { viewModel.addFilterDomain(it) },
             onAddToReadLater = { viewModel.addToReadLater(it) },
             onCrosspost = { viewModel.openCrosspostDialog(it) },
-            onViewAuthor = { viewModel.openUserProfile(it) }
+            onViewAuthor = { viewModel.openUserProfile(it) },
+            onHidePost = { viewModel.hidePost(it) },
+            onBlockSubreddit = { viewModel.blockSubreddit(it) }
         )
     }
 
@@ -950,6 +964,11 @@ fun RedXMainScreen(
         FilterSettingsDialog(
             blockedKeywords = blockedKeywords,
             blockedDomains = blockedDomains,
+            blockedSubreddits = blockedSubreddits,
+            hiddenPostCount = hiddenPostIds.size,
+            onAddSubreddit = { viewModel.addFilterSubreddit(it) },
+            onRemoveSubreddit = { viewModel.removeFilterSubreddit(it) },
+            onUnhideAllPosts = { viewModel.unhideAllPosts() },
             isFilterEnabled = isFilterEnabled,
             onToggleFilterEnabled = { viewModel.toggleFilterEnabled(it) },
             onAddKeyword = { viewModel.addFilterKeyword(it) },
@@ -1034,6 +1053,9 @@ fun RedXMainScreen(
         SearchDialog(
             currentSubreddit = uiState.activeSubreddit,
             initialIncludeMature = userProfile.showMatureContent,
+            recentSearches = recentSearches,
+            onRemoveRecentSearch = { viewModel.removeRecentSearch(it) },
+            onClearRecentSearches = { viewModel.clearRecentSearches() },
             onDismiss = { viewModel.setSearchDialogOpen(false) },
             onExecuteSearch = { query, inSub, mature, sort ->
                 viewModel.executeSearch(query, inSub, mature, sort)
@@ -1806,6 +1828,7 @@ private fun FeedPanel(
     onSweepReadPosts: () -> Unit,
     onCycleViewMode: () -> Unit,
     onSelectSort: (FeedSort) -> Unit,
+    onSelectTopTimeRange: (com.example.redx.model.TopTimeRange) -> Unit = {},
     onClearSearch: () -> Unit,
     onRevertFeed: (String, FeedSort) -> Unit = { _, _ -> },
     onSearchContentTypeSelected: (SearchContentType) -> Unit = {},
@@ -2267,7 +2290,9 @@ private fun FeedPanel(
 
                 SortBar(
                     activeSort = uiState.activeSort,
-                    onSortSelected = onSelectSort
+                    onSortSelected = onSelectSort,
+                    topTimeRange = uiState.topTimeRange.takeUnless { uiState.isSearchActive },
+                    onTopTimeRangeSelected = onSelectTopTimeRange
                 )
 
                 if (uiState.isLoading) {

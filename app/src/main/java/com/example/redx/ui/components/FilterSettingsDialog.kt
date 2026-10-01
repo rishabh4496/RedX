@@ -65,6 +65,11 @@ import com.example.redx.theme.TextTertiary
 fun FilterSettingsDialog(
     blockedKeywords: List<String>,
     blockedDomains: List<String>,
+    blockedSubreddits: List<String> = emptyList(),
+    hiddenPostCount: Int = 0,
+    onAddSubreddit: (String) -> Unit = {},
+    onRemoveSubreddit: (String) -> Unit = {},
+    onUnhideAllPosts: () -> Unit = {},
     isFilterEnabled: Boolean,
     onToggleFilterEnabled: (Boolean) -> Unit,
     onAddKeyword: (String) -> Unit,
@@ -75,6 +80,7 @@ fun FilterSettingsDialog(
 ) {
     var keywordInput by remember { mutableStateOf("") }
     var domainInput by remember { mutableStateOf("") }
+    var subredditInput by remember { mutableStateOf("") }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -369,6 +375,139 @@ fun FilterSettingsDialog(
                                 }
                             }
                         }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Section 3: Blocked Subreddits
+                Text(
+                    text = "Blocked Subreddits (${blockedSubreddits.size})",
+                    color = RedditOrange,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Hide every post from these communities (still visible if you open the subreddit yourself):",
+                    color = TextSecondary,
+                    fontSize = 12.sp
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = subredditInput,
+                        onValueChange = { subredditInput = it },
+                        placeholder = { Text("e.g. memes", color = TextTertiary, fontSize = 13.sp) },
+                        prefix = { Text("r/", color = RedditOrange, fontWeight = FontWeight.Bold) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = {
+                            if (subredditInput.isNotBlank()) {
+                                onAddSubreddit(subredditInput)
+                                subredditInput = ""
+                            }
+                        }),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = RedditOrange,
+                            unfocusedBorderColor = AmoledBorder,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary,
+                            focusedContainerColor = AmoledSurfaceElevated,
+                            unfocusedContainerColor = AmoledSurfaceElevated
+                        ),
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    Button(
+                        onClick = {
+                            if (subredditInput.isNotBlank()) {
+                                onAddSubreddit(subredditInput)
+                                subredditInput = ""
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = RedditOrange),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.height(50.dp)
+                    ) {
+                        Text("Add")
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                if (blockedSubreddits.isEmpty()) {
+                    Text(
+                        text = "No subreddits blocked yet",
+                        color = TextTertiary,
+                        fontSize = 12.sp,
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                    )
+                } else {
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        blockedSubreddits.forEach { sub ->
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(AmoledSurfaceElevated)
+                                    .border(1.dp, AmoledBorder, RoundedCornerShape(6.dp))
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(text = "r/$sub", color = TextPrimary, fontSize = 12.sp)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Unblock r/$sub",
+                                        tint = NsfwRed,
+                                        modifier = Modifier
+                                            .size(14.dp)
+                                            .clickable { onRemoveSubreddit(sub) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Hidden posts
+                Spacer(modifier = Modifier.height(24.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Hidden Posts ($hiddenPostCount)",
+                            color = RedditOrange,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Posts you hid with \"Hide this post\"",
+                            color = TextSecondary,
+                            fontSize = 12.sp
+                        )
+                    }
+                    Button(
+                        onClick = onUnhideAllPosts,
+                        enabled = hiddenPostCount > 0,
+                        colors = ButtonDefaults.buttonColors(containerColor = AmoledBorder),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("Unhide all", color = TextPrimary, fontSize = 12.sp)
                     }
                 }
 

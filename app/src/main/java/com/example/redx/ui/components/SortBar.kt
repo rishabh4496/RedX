@@ -1,5 +1,9 @@
 package com.example.redx.ui.components
 
+import com.example.redx.model.TopTimeRange
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -47,12 +51,15 @@ import com.example.redx.theme.TextSecondary
 fun SortBar(
     activeSort: FeedSort,
     onSortSelected: (FeedSort) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    topTimeRange: TopTimeRange? = null,
+    onTopTimeRangeSelected: ((TopTimeRange) -> Unit)? = null
 ) {
     val displayedSorts = listOf(FeedSort.HOT, FeedSort.NEW, FeedSort.TOP, FeedSort.RISING)
 
+    Column(modifier = modifier.fillMaxWidth()) {
     Row(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
             .background(AmoledBackground)
             .padding(horizontal = 12.dp, vertical = 6.dp),
@@ -121,5 +128,34 @@ fun SortBar(
                 }
             }
         }
+    }
+
+    // "Top" needs a time window (Reddit's t= parameter); show it only while Top is active.
+    if (activeSort == FeedSort.TOP && topTimeRange != null && onTopTimeRangeSelected != null) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(AmoledBackground)
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 12.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TopTimeRange.entries.forEach { range ->
+                val selected = range == topTimeRange
+                Text(
+                    text = range.label,
+                    color = if (selected) Color.White else TextSecondary,
+                    fontSize = 11.sp,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(if (selected) RedditOrange else AmoledBorder.copy(alpha = 0.4f))
+                        .clickable { onTopTimeRangeSelected(range) }
+                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                )
+            }
+        }
+    }
     }
 }
